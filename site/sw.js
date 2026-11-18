@@ -1,4 +1,4 @@
-const CACHE_NAME = 'avd-learn-v1';
+const CACHE_NAME = 'avd-learn-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const ASSETS = [
   './manifest.webmanifest',
   './icons/app-192.png',
   './icons/app-512.png',
+  '../pins.json',
   '../dataset/tracks.json',
   '../dataset/concepts.json',
   '../dataset/scenarios.json',
