@@ -12,12 +12,12 @@
     "concepts": {
       "path": "dataset/concepts.json",
       "schema": "avd-learn-concepts/v1",
-      "count": 26
+      "count": 39
     },
     "scenarios": {
       "path": "dataset/scenarios.json",
       "schema": "avd-learn-scenarios/v1",
-      "count": 7
+      "count": 10
     },
     "labs": {
       "path": "dataset/labs.json",
