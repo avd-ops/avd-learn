@@ -1,256 +1,141 @@
-# Card generation pipeline: spec and red team
+# Distilabel Content Pipeline Spec & Red-Team
 
-> **Personal project, not for production, as is, not affiliated with the author's employer or Microsoft.**
+**Status:** Proposed design (no pipeline code implemented yet)  
+**Scope:** Automate generating *candidate* entries for `dataset/concepts.json` and `dataset/scenarios.json` from pinned `avd-assess` and `avd-second-brain` commits in `pins.json`.
 
-Status: **design only.** Nothing here is built. `scripts/generate.py` is written only after every acceptance criterion in section 6 has a passing check.
+## 1. Goal & Non-Goals
 
-## 1. Goal
+- **Goal:** Turn every relevant deployment dimension, method, and rule in `avd-assess` and `avd-second-brain` into ground-up AZ-104/AZ-140 study cards and diagnostic scenarios—with zero manual copy-paste and full source traceability.
+- **Non-Goals:**
+  - Never overwrite or delete hand-curated entries.
+  - Never push directly to `main`; generated batches land via a branch + PR for human review.
+  - Never assume sibling repos exist on local disk; fetch pinned files from `https://raw.githubusercontent.com/<repo>/<commit>/<path>` using `pins.json`.
 
-A repeatable script, `scripts/generate.py`, that reads the pinned `avd-assess` and `avd-second-brain` commits in `pins.json` and **proposes** new entries for `dataset/concepts.json` and `dataset/scenarios.json`. A person reviews every proposal in a pull request. The script writes proposals to `output/` by default and touches `dataset/*.json` only when the operator runs `--apply` on a working branch (step 7). It never commits, pushes, merges or runs on a schedule.
+## 2. Pipeline Architecture (`scripts/generate.py`)
 
-Non-goals:
-
-- Replacing hand-curated cards. Generated cards fill gaps; hand-curated cards win every overlap.
-- Writing exam content that the pinned sources don't support. If the sources are silent, the script reports a gap instead of writing a card.
-- Reading anything other than the two pinned repos (no Learn scraping, no web search, no live Azure).
-
-## 2. Inputs
-
-File contents are fetched from `https://raw.githubusercontent.com/<repo>/<commit>/<path>` at the commits in `pins.json`. A fetch that returns anything but 200 stops the run. Raw URLs can't list a folder, so the globs (`methods/*.md`, `references/*.yaml`, `knowledge/rules/*.json`) are expanded with one unauthenticated call per source to the GitHub git trees API at the pinned commit: two calls a run, well inside the unauthenticated limit, and no token needed.
-
-| Source | Pinned path | What the pipeline takes from it |
-| --- | --- | --- |
-| avd-assess | `pillars.yaml` | Pillar `id`, `title`, `scope`, `method`. Used to map a proposal to a study track and to pin it (`pillars.yaml#<id>`). |
-| avd-assess | `dimensions.yaml` | One work item per row: `id`, `pillar`, `title`, `decides`, `baseline.says`, `baseline.claims`, `note`. Pinned as `dimensions.yaml#<row id>`. |
-| avd-assess | `methods/*.md` | One work item per numbered step or `##` section. Pinned as `methods/<file>.md`. |
-| avd-assess | `references/*.yaml` | **Resolution layer, added by this spec.** A row's `ref:<file>#<claim>` IDs resolve to a claim's one-line `says` in our own words. This is the only factual text a generated card may restate. |
-| avd-assess | `tests/wording.json` | The `banned` product list for the leak gate (section 3, step 5). |
-| avd-second-brain | `knowledge/rules/*.json` | Rule `id`, `title`, `values`, `history`. Pinned as `knowledge/rules/<file>.json`. At the current pin there are two rules (`calibration`, `workload-tiers`). |
-| this repo | `dataset/*.json` | Existing cards and scenarios, for gap selection and dedup. |
-
-Assumption: `references/*.yaml` is in scope even though the ask names only `dimensions.yaml`, `methods/*.md`, `pillars.yaml` and `knowledge/rules/*.json`. Without it the generator sees claim IDs but not what they say, and every fact on a card would come from the model's memory. That is exactly risk (a) below.
-
-## 3. Pipeline
-
-```
+```text
 pins.json
-   |
-   v
-[1 fetch + verify] -> [2 work items] -> [3 gap select] -> [4 generate JSON] -> [5 deterministic gates]
-                                                                                    |
-                                     [8 PR, person reviews] <- [7 write proposals] <- [6 LLM judge]
+  │
+  ▼ (1) Fetch & Chunk (deterministic)
+Raw pinned files (dimensions.yaml, methods/*.md, pillars.yaml, rules/*.json)
+  │
+  ▼ (2) Pre-Filter & Dedup (deterministic)
+Unmapped or changed chunks only (--limit N, --dry-run supported)
+  │
+  ▼ (3) Generate (Distilabel structured JSON)
+Candidate concept / scenario + verbatim sourceQuote
+  │
+  ▼ (4) LLM-as-a-Judge Gate (4 binary checks)
+Pass only if grounded, non-duplicate, clear, and unambiguous
+  │
+  ▼ (5) Deterministic Gate (node --test tests/learn.test.mjs)
+Valid JSON, valid track, valid answerIndex, zero UUIDs/emails
 ```
 
-Distilabel runs steps 4 and 6 as a `Pipeline` of tasks over a dataset of work items. Steps 1 to 3, 5 and 7 are plain Python functions, written as Distilabel custom steps so a run is one pipeline with one cache, but none of them call a model. The exact Distilabel version is pinned in `scripts/requirements.txt`; the class names below are checked against that version before code is written (criterion A10).
+### Stage Details
 
-### Step 1: fetch and verify
+1. **Fetch & Chunk (Deterministic):**
+   - Read `pins.json` for `avd-assess` and `avd-second-brain` commits.
+   - Fetch `pillars.yaml`, `dimensions.yaml`, `methods/*.md`, and `knowledge/rules/*.json` via `raw.githubusercontent.com`.
+   - Split into atomic chunks, each carrying an exact `pin` (e.g., `avd-assess:dimensions.yaml#profileStorageSku`) and a SHA-256 `sourceHash`.
+2. **Pre-Filter & Dedup (Deterministic):**
+   - Load existing `dataset/concepts.json` and `dataset/scenarios.json`.
+   - Skip any chunk whose `pin` is already cited by a curated entry, or whose `sourceHash` matches a previously processed chunk.
+3. **Generate (Distilabel Structured Output):**
+   - Prompt the generator model to output strict JSON matching `concepts.json` or `scenarios.json` plus a temporary `sourceQuote` field (a verbatim excerpt from the chunk justifying the card).
+   - Map `exams` (`AZ-104`, `AZ-140`) and `track` (`az104-core`, `avd-architecture`, `avd-identity-network`, `avd-profiles-apps`, `avd-images-scaling`, `avd-ops-troubleshooting`).
+4. **LLM-as-a-Judge Gate:**
+   A second Distilabel step evaluates each candidate on **four required pass/fail gates**:
+   - **Grounding:** Are every technical claim, gotcha, and `checkQuestion` answer directly supported by the chunk and `sourceQuote`?
+   - **Distractor Quality:** Are the 3 wrong choices plausible AZ-104/AZ-140 misconceptions (not absurd, not "All/None of the above", and not arguably correct)?
+   - **Ground-Up Clarity:** Does `plainEnglish` explain the concept simply rather than restating raw YAML keys?
+   - **Novelty:** Does it teach something meaningfully distinct from existing entries in `dataset/`?
+5. **Deterministic Gate & Staging:**
+   - Strip the temporary `sourceQuote` field, tag generated items with `"generatedBy": "distilabel-v1"`, and write to a staging file or append to `dataset/` on a feature branch.
+   - Run `node --test tests/learn.test.mjs`. Reject the batch if any test fails.
 
-- Read `pins.json`. For each source, fetch the files in section 2 at the pinned commit into `output/generate/<run-id>/source/` (git-ignored).
-- Record each file's SHA-256 and its git blob SHA from the tree listing in `output/generate/<run-id>/manifest.json`. Every later step reads only from this snapshot.
-- Fail if `pins.json` has a source the script doesn't know, or is missing one it needs.
+## 3. Red-Team Analysis (Failure Modes & Mitigations)
 
-### Step 2: work items
+| Risk | How it fails | Mitigation |
+|---|---|---|
+| **Hallucinated Azure/AVD settings** | Generator invents a VM SKU, RBAC role name, or registry key not in the pinned source. | Require verbatim `sourceQuote` in Stage 3 + fail Judge Gate 1 if any named role/SKU/setting is absent from the chunk. |
+| **Ambiguous or multi-answer MCQs** | Two choices are defensible in real life, ruining exam prep trust. | Ban "All/None of the above" in generator prompt; Judge Gate 2 explicitly checks whether any distractor could be argued true. |
+| **Clobbering hand-curated cards** | Re-running the pipeline overwrites refined human edits. | Curated items lack `generatedBy`; pipeline never modifies or deletes items without `generatedBy`. |
+| **Pin-bump churn & cost** | Bumping `pins.json` re-generates all 200+ dimensions unnecessarily. | Track `sourceHash` per `pin`; only chunks whose hash changed are sent to the LLM. Support `--dry-run` and `--limit`. |
+| **Leaked IDs / banned terms** | Upstream example or LLM completion emits a UUID or email. | `tests/learn.test.mjs` enforces UUID/email regex rejection on all `dataset/*.json` files before merge. |
+| **Exam domain drift** | Generated card teaches an obscure `avd-assess` internal detail with zero AZ-104/AZ-140 relevance. | Judge Gate 3/4 rejects internal-only trivia that lacks an `AZ-104` or `AZ-140` objective mapping. |
 
-One work item per source unit:
+## 4. Acceptance Criteria Before Implementing `scripts/generate.py`
 
-```json
-{
-  "kind": "dimension",
-  "pin": "avd-assess:dimensions.yaml#scaling.ramp-down",
-  "pillar": "scaling",
-  "title": "Ramp-down and disconnected sessions",
-  "decides": "...",
-  "says": "...",
-  "note": "...",
-  "claims": [
-    {"id": "ref:autoscale-faq#disconnected-time-limit", "says": "..."}
-  ],
-  "sourceSha": "<blob sha of dimensions.yaml>"
-}
-```
+1. A `--dry-run --limit 5` run against `avd-assess:dimensions.yaml` produces **>= 4/5** judge-approved candidates with verifiable `pin` links.
+2. Zero duplicate `id`s, zero invalid `track` references, and zero UUID/email leak failures under `node --test tests/learn.test.mjs`.
+3. Every generated `checkQuestion` passes a manual spot-check for single unambiguous correct answer.
 
-`claims[].says` comes from `references/<file>.yaml`. A `ref:` that doesn't resolve is kept with `"says": null` and counted in the run report; the generator is told it may not use it. `gap:` and `obs:` IDs are carried for context but never count as factual support.
+## 5. Red-Team Addendum
 
-### Step 3: gap selection
+A second review of sections 2 to 4, checked against the pinned avd-assess commit (`064607c`) and the dataset on `main` (39 concepts, 10 scenarios). Each finding names the gap in the design above and the change that closes it. The criteria in section 6 add to section 4; they don't replace it.
 
-Before spending a model call, drop work items already covered:
+### 5.1 Hallucinated Azure/AVD settings (risk a)
 
-- A work item is **covered** if any existing card or scenario pins the same `pin` value, or pins the same file and its landing zone parameter (older cards pin `dimensions.yaml#<landingZone parameter>`; the map from parameter to row comes from each row's `landingZone` list).
-- Rank the rest: rows with at least two resolved claims first, then rows whose pillar maps to an exam domain with the fewest cards today.
-- `--limit N` (default 10) caps how many items go to step 4. `--pin <value>` targets one item.
+- **The chunks hold almost no facts to quote.** A `dimensions.yaml` row carries `decides`, a one-line `baseline.says` and a list of claim IDs (`ref:avd-ephemeral-os-disks#unsupported-features`). What each claim says lives in `references/<file>.yaml` (266 files at the pin), which section 2 doesn't fetch. A `sourceQuote` drawn from the row alone can't support most of what an exam card needs, so the generator either fills in from memory or the judge rejects nearly everything.
+  **Change:** fetch `references/*.yaml` too, and resolve every `ref:` ID in a chunk to its claim's `says` line. Those lines are already in our own words, so quoting them is safe. A `ref:` that doesn't resolve can't be quoted. `gap:` and `obs:` IDs are context only.
+- **Grounding is checked only by the judge.** A model judging another model's output misses an invented value that reads naturally.
+  **Change:** add a deterministic grounding gate before the judge. Every number, percentage, size, date, role name, registry path and setting name in the card must appear in the chunk or in a resolved claim's `says`; anything else fails as ungrounded. Replace the single `sourceQuote` with a per-field support map (`plainEnglish`, each gotcha, each choice and the explanation each list the claim IDs behind them).
+- **Guidance read as a rule.** Claims carry `kind: published | guidance | prior`. A `guidance` or `prior` claim can't support "must", "always" or "required". Add this as a gate rule.
 
-### Step 4: generate structured JSON
+### 5.2 Duplicates and overlap with hand-curated cards (risk b)
 
-Distilabel `TextGeneration` task, one call per work item, with structured output bound to the proposal schema (JSON Schema in `scripts/schema/proposal.schema.json`). The system prompt:
+- **Two pin forms for the same row.** Of the pins on `main`, 26 use `dimensions.yaml` row IDs (`#scaling.ramp-down`) and 11 use landing zone parameter names (`#startVmOnConnect`), which `dimensions.yaml` lists under each row's `landingZone`. Section 2's "skip any chunk whose pin is already cited" compares strings, so it misses every parameter-pinned card and regenerates its topic.
+  **Change:** build a parameter-to-row map from `landingZone` lists and treat either form as covering the row. Or re-pin the 11 cards to row IDs once (criterion 7).
+- **Novelty only by the judge.** Add a deterministic check first: same `id`, same pin set, or title, `plainEnglish` and question text each above a similarity threshold (stdlib `difflib` is enough) against every existing card and every earlier candidate in the same run. Give the judge the three nearest existing cards, so its novelty call has something to compare against.
+- **`generatedBy` protects curated cards only while it stays put.** A reviewer who edits a generated card should remove `generatedBy`, or the next run may treat it as regenerable. State the rule: the pipeline only appends and never edits any existing entry, generated or not. Changes to existing cards are hand edits.
 
-- Gives the work item and the resolved `claims[].says` lines as the **only** facts allowed.
-- Requires every sentence in `plainEnglish`, `whyItMatters`, `gotchas` and `checkQuestion.explanation` to cite one or more claim IDs in a parallel `support` map.
-- Allows a card or a scenario per item, or `{"skip": "<reason>"}` when the claims are too thin.
-- States the house rules: American English, synthetic placeholders only (`contoso.com`, `<tenant-id>`, `10.100.0.0/22`), no product names other than Microsoft's, four choices, one correct.
+### 5.3 Weak or ambiguous distractors (risk c)
 
-Proposal schema (a concept; a scenario is the same idea with `facts`, `prompt`, `choices`, `answerIndex`, `explanation`):
+- **Answer position and length bias.** Generated questions tend to put the right answer in the same slot and make it the longest, most hedged option. Add a deterministic lint: four choices, no two choices more than 80 percent similar, the correct choice no more than 40 percent longer than the longest distractor, and a report of answer-position counts per batch. Shuffle the correct position at write time with a seed taken from the card `id`, so reruns are stable.
+- **No reason recorded for each wrong answer.** Ask the generator for a `whyWrong` per distractor, with its own claim IDs, and drop it at write time. A distractor with no `whyWrong` fails. Drawing distractors from neighboring rows in the same pillar (a real setting that answers a different question) gives plausible wrong answers without inventing settings.
+- **Scenario facts that contradict the answer.** In a scenario the `facts` block can quietly make another choice correct (for example a scaling plan option that already lets hosts stop). The judge's distractor check should read `facts` with the choices, and the manual spot-check in criterion 3 should cover scenarios too.
 
-```json
-{
-  "type": "concept",
-  "card": {
-    "id": "avd-scaling-ramp-down-disconnected",
-    "track": "avd-images-scaling",
-    "title": "...",
-    "exams": ["AZ-140"],
-    "domain": "AZ-140: Plan and implement an Azure Virtual Desktop infrastructure",
-    "plainEnglish": "...",
-    "whyItMatters": "...",
-    "gotchas": ["..."],
-    "pins": ["avd-assess:dimensions.yaml#scaling.ramp-down"],
-    "checkQuestion": {"prompt": "...", "choices": ["...", "...", "...", "..."], "answerIndex": 2, "explanation": "..."}
-  },
-  "support": {
-    "plainEnglish": [["ref:autoscale-plan#ramp-down-consolidates"]],
-    "gotchas": [["ref:autoscale-faq#disconnected-time-limit"]],
-    "checkQuestion.choices[2]": [["ref:autoscale-plan#ramp-down-consolidates"]],
-    "distractors": [
-      {"index": 0, "whyWrong": "...", "support": ["ref:..."]}
-    ]
-  },
-  "provenance": {"workItem": "avd-assess:dimensions.yaml#scaling.ramp-down", "sourceSha": "...", "run": "<run-id>"}
-}
-```
+### 5.4 Pin-bump drift (risk d)
 
-`support` and `provenance` never reach the dataset; step 7 strips them into the review report.
+- **`sourceHash` finds changed chunks but not affected cards.** After a pin bump, a changed hash regenerates the chunk, but existing cards (generated and curated) built on the old text are never rechecked, and a renamed or removed row leaves cards pinning nothing.
+  **Change:**
+  - Commit a small `dataset/pin-index.json`: files, row IDs and pillar IDs at the pinned commits, built by `scripts/pin_index.py`.
+  - Add `tests/pins.test.mjs`, which fails on any pin missing from the index. This runs offline in CI.
+  - Add a `--drift <old>..<new>` report that lists every card whose cited row or claim `says` changed. It only reports and proposes no edits.
+  - Keep a pin bump in its own PR, never mixed with new cards.
+- **Older generated cards keep their old source silently.** Store the `sourceHash` of each generated card's chunk in the staging report and PR body, so a reviewer can see which source version a card came from.
 
-### Step 5: deterministic gates
+### 5.5 Leakage of banned terms or IDs (risk e)
 
-Pure functions, tested offline with fixtures (criterion A3). A proposal that fails any gate is dropped with its reason in the report; it never reaches the judge.
+- **The test covers UUIDs and emails only.** The family also bans third-party product names (avd-assess `tests/wording.json`, `banned`) and private project names, and AGENTS.md bans IPs and domains.
+  **Change:** extend the leak test to `wording.json` at the pin, the family's banned project names, domains other than `contoso.com` and Microsoft's documented service names, and IPs outside `10.0.0.0/8`. Allow Microsoft's documented platform addresses (for example `168.63.129.16`, Azure's DNS) only through a commented allowlist, `scripts/public-ips.txt`. Run the same scan on the PR body the pipeline drafts.
+- **Learn text copied verbatim.** avd-assess keeps Learn content as links only. Because the grounding gate only accepts our own `says` text, a card can't quote Learn. Keep that rule explicit in the generator prompt.
 
-1. **Schema.** Valid against `proposal.schema.json`, then against the same rules `tests/learn.test.mjs` applies (valid track, at least one exam, at least one pin, `answerIndex` inside `choices`).
-2. **Pin resolution.** Every pin names a file in the step 1 snapshot, and an anchor names a real row ID in `dimensions.yaml` or pillar ID in `pillars.yaml`.
-3. **Grounding.** Every sentence has a `support` entry; every cited claim ID resolved in step 2 and belongs to the work item. Every number, percentage, size, date, role name, registry path, setting name and API value in the card (a fixed set of regexes, plus Title Case runs of three or more words) must appear in a cited claim's `says` or the row's `says`, `decides` or `note`. Anything else fails as **ungrounded** (risk a).
-4. **Dedup.** Against every existing card and every earlier proposal in this run: same `id`; same pin set; or title, `plainEnglish` and check question each above the similarity thresholds in criterion A6 (stdlib `difflib` ratio on normalized text). Overlaps fail as **duplicate** (risk b).
-5. **Leak scan.** No UUID, email, IP outside `10.0.0.0/8` (except Microsoft's documented platform addresses in `scripts/public-ips.txt`, such as `168.63.129.16`, each with a comment and a Learn link), domain outside `contoso.com` and Microsoft's documented service names, word from `tests/wording.json` `banned`, word from the family banned-project list, or a private repo name. Same scan on the PR body (risk e).
-6. **Distractor lint.** Exactly four choices; no two choices with similarity over 0.8; the correct answer isn't the longest choice by more than 40 percent; no "all of the above" or "none of the above"; every distractor has a `whyWrong` with support (risk c).
+### 5.6 Other gaps
 
-### Step 6: LLM judge
+- **Fetching globs.** Raw URLs can't list `methods/*.md`, `references/*.yaml` or `knowledge/rules/*.json`. One unauthenticated git trees API call per source at the pinned commit lists them: two calls per run, inside the anonymous limit, with no token.
+- **Prompt injection from source text.** The sources are our own public repos, but merged text there can still say "ignore the rules". Put source text in a delimited data block. None of the deterministic gates should depend on the model following instructions.
+- **Judge agrees with generator.** Use a different prompt, temperature 0 and, where the config allows, a different model for the judge. The deterministic gates run first, and a person reviews every card.
+- **Cost and secrets.** The API key comes from the operator's environment, never a file or chat. Before the first call the script prints the call count and an estimated token count and stops without `--yes`. A `--max-calls` cap (default 40) is a hard stop. The script never runs in CI or on a schedule.
+- **Exam domain strings.** Restrict `domain` to the strings already used in `dataset/concepts.json`. A new domain is a hand edit.
 
-A second Distilabel task, run only on proposals that passed step 5. It uses a different system prompt from step 4 and, where the config allows, a different model. Inputs: the proposal, the work item, the cited claims, and the three nearest existing cards from the dedup step. It returns structured scores, 1 to 5, each with a one-line reason:
+## 6. Added Acceptance Criteria
 
-| Score | Question | Pass |
-| --- | --- | --- |
-| `faithful` | Does every statement follow from the cited claims, with nothing added? | 5 |
-| `examRelevant` | Is this tested on AZ-104 or AZ-140 as stated in `domain`? | 4 or more |
-| `oneCorrect` | Is exactly one choice defensibly correct from the claims? | 5 |
-| `distractorsPlausible` | Would a candidate who half-knows the topic pick each distractor? | 3 or more |
-| `distinct` | Does it teach something the three nearest cards don't? | 4 or more |
+These add to section 4, and each is an offline check unless noted.
 
-The judge never edits a card. A proposal that fails a score is dropped with the judge's reason. The judge's verdict is advice to the reviewer, never approval: a person still reads every card (section 3, step 8).
+4. **Inputs resolve.** `scripts/pin_index.py --check` lists both pinned trees (one API call each) and fetches every input over raw URLs, including `references/*.yaml`; exit 0. *(Network.)*
+5. **Gates are pure functions with fixtures.** Each gate in sections 5.1 to 5.5 has a passing and a failing fixture under `tests/fixtures/generate/`. That includes an invented registry value (ungrounded), a reworded copy of `avd-scaling-finops` (duplicate), a choice set whose correct answer is much longer (distractor lint), a GUID, a banned product name and an unlisted public IP (leak), and a `guidance` claim used as "must" (grounding).
+6. **Dedup thresholds tuned on today's data.** Run over the 39 concepts and 10 scenarios on `main`, the duplicate gate flags no false duplicates, and it flags each of five hand-made near-copies.
+7. **Pins are checked.** `dataset/pin-index.json` and `tests/pins.test.mjs` exist and pass. The 11 parameter pins are either re-pinned to row IDs or mapped by the index.
+8. **Leak test extended.** `node --test tests/learn.test.mjs` checks the extra patterns in section 5.5, and fails on a fixture for each.
+9. **Judge rubric fixed.** The judge's checks and pass rules live in `scripts/generate.toml`. A dry run with a stub model shows a failing check drops a candidate.
+10. **Cost guard.** With a stub model, the script prints the call estimate, stops without `--yes`, and stops at `--max-calls`.
+11. **Write scope.** With the network stubbed, a run writes only under `output/` (git-ignored) and, with `--apply` on a non-default branch with a clean tree, appends to `dataset/*.json`. It never commits, pushes or opens a PR.
+12. **Distilabel pinned.** The Distilabel version is pinned in `scripts/requirements.txt`, and a short import test confirms that the step, task and structured-output options this design uses exist in that version.
 
-### Step 7: write proposals
+### Open questions
 
-- Proposals go to `output/generate/<run-id>/proposals.json` and a human-readable `report.md` (git-ignored): each card, its support map, its judge scores, and every dropped item with its reason.
-- `--apply` appends the passing cards to `dataset/concepts.json` and `dataset/scenarios.json` in the existing formatting, then runs `node --test tests/learn.test.mjs`. It refuses to run if the working tree is dirty or the branch is the default branch.
-
-### Step 8: pull request
-
-- The operator runs the script locally, reviews `report.md`, runs `--apply`, and opens a PR from a `generate/<run-id>` branch with the report's summary (counts, dropped reasons, pins used) in the body. Nothing pushes or opens a PR automatically.
-- The PR body states the pinned commits and the run ID, and says the cards were proposed by a model and checked by a person.
-- Normal review rules apply: the owner merges. No auto-merge.
-
-## 4. Configuration and cost
-
-- `scripts/generate.toml`: generator and judge model names, temperature (0 for the judge), `--limit` default, similarity thresholds. No secrets.
-- The model API key comes from an environment variable the operator sets in their own shell. It is never written to a file, a log or chat.
-- Before the first model call the script prints the number of calls and an estimated token count, and stops unless `--yes` is given. A `--max-calls` ceiling (default 40) is a hard stop.
-- The script never runs in CI. CI only runs the offline tests in criterion A3 against fixtures.
-
-## 5. Red team
-
-Each finding: what goes wrong, how likely it is, the guard, and what's left.
-
-### (a) Hallucinated Azure or AVD settings not in the pinned source
-
-**Failure.** The model knows a lot about Azure and fills gaps from memory: a registry value, a default percentage, a role name, a retired feature, a preview limit stated as general. A fluent card with one invented setting is worse than no card, because the learner will trust it on exam day.
-
-**Likelihood.** High without the grounding gate. Our own sources hold claim IDs and short summaries, not the Microsoft text, so most of what a card could say isn't in the snapshot.
-
-**Guards.** Step 2 hands the model only resolved `says` lines. Step 5.3 rejects any literal (number, setting, role, path) not found in a cited claim. The judge's `faithful` score must be 5. `report.md` lists the claims behind every sentence so the reviewer checks support, not prose.
-
-**Residual.** A paraphrase can overstate a claim without adding a literal (for example "always" where the source says "recommended"). The judge and the reviewer catch these; the gate doesn't. Claims marked `kind: guidance` or `kind: prior` must be phrased as guidance (criterion A5). Also, a pinned claim can itself be stale; that's a pin-bump problem (d), not a generation one.
-
-### (b) Duplicate or overlapping concepts with hand-curated cards
-
-**Failure.** The generator writes "Scaling plans" again under a new ID, or a card whose question is a reworded version of an existing one. The flashcard deck fills with near-copies and the exam mode asks the same thing twice.
-
-**Likelihood.** High. The existing cards pin landing zone parameters (for example `dimensions.yaml#startVmOnConnect`) while the generator pins row IDs (`dimensions.yaml#cost.power`), so a naive pin comparison misses the overlap.
-
-**Guards.** Step 3 treats a parameter pin as covering the row that lists that parameter, before any model call. Step 5.4 compares IDs, pin sets and text similarity against every existing card and every earlier proposal in the run. The judge's `distinct` score sees the three nearest cards. Hand-curated cards always win: the script never edits or replaces an existing entry.
-
-**Residual.** Two cards can teach the same idea from different rows (for example `cost.power` and `scaling.personal`). The thresholds are tuned against today's dataset (criterion A6), and the reviewer decides close calls.
-
-### (c) Weak or ambiguous distractors in `checkQuestion`
-
-**Failure.** Distractors that are obviously absurd ("They convert TCP into UDP"), two answers that are both right, a correct answer that's the only long one, or a distractor that's actually correct under a different but valid configuration.
-
-**Likelihood.** Medium to high; models default to one plausible answer and three fillers.
-
-**Guards.** The schema requires a `whyWrong` with support for every distractor. Step 5.6 lints length, similarity and banned patterns. The judge must score `oneCorrect` at 5 and `distractorsPlausible` at 3 or more. The generator is told to draw distractors from neighboring rows in the same pillar (a real setting that answers a different question) rather than inventing them.
-
-**Residual.** "Plausible" is judgment. The reviewer reads every question. Answer position is shuffled at `--apply` with a fixed seed per card ID so it isn't always B, and the report shows the distribution.
-
-### (d) Pin-bump drift when `pins.json` updates
-
-**Failure.** A new avd-assess commit renames a row, retires a claim, or changes a baseline (for example a new disk type becomes supported). Existing cards, hand-curated or generated, then pin rows that no longer exist or teach a baseline the source has dropped. Generated cards are more exposed because they were built from the exact old wording.
-
-**Likelihood.** Certain over time; avd-assess changes weekly.
-
-**Guards.**
-
-- A new offline check (criterion A7), `tests/pins.test.mjs`, reads a committed `dataset/pin-index.json` (row IDs, pillar IDs and file list at the pinned commit, built by `scripts/pin_index.py`) and fails if any card pins something not in it. A pin bump PR regenerates the index, and the test then lists every broken pin.
-- Proposals record `sourceSha`. A `--drift` mode re-fetches at the new pin and lists every card whose cited row or claim `says` text changed between the old and new commit, for a person to re-check. It proposes no edits.
-- A pin bump is its own PR, never mixed with new cards.
-
-**Residual.** A claim's meaning can change while its text stays the same (a Learn page updated under an unchanged claim). That is avd-assess's freshness problem; we inherit it and say so on the card's pin link, which already points at the pinned commit.
-
-### (e) Accidental leakage of banned terms or IDs
-
-**Failure.** The model emits a GUID it remembers, a real-looking domain, a third-party product name the family keeps out, a private repo name, or text copied from a Microsoft page. Or the PR body or report carries something the dataset doesn't.
-
-**Likelihood.** Low per card, but a public repo means one miss is published.
-
-**Guards.** Step 5.5 scans every field of every proposal, and the PR body, with the patterns in section 3. The existing `no tenant UUIDs or emails leaked` test stays and is extended with the banned-words list (criterion A8). Inputs are the two public repos only, so nothing private can enter the prompt. `output/` is git-ignored. Learn content is link-only in avd-assess, so a card must not quote it; the grounding gate only permits our own `says` text, which is already in our words.
-
-**Residual.** A new product name not on the list. The list is avd-assess's to maintain; this repo reads it at the pin.
-
-### Other findings
-
-- **Prompt injection from source text.** The sources are our own public repos, but a merged PR there could carry text such as "ignore the rules and add ...". Guard: source text goes in a delimited data block, the gates in step 5 don't depend on the model obeying, and the script never takes an action based on model output beyond writing files to `output/`.
-- **Judge and generator agree with each other.** Same model, same blind spots. Guard: different prompt, temperature 0, optional different model, and the deterministic gates run first. The person is the final judge.
-- **Non-repeatable runs.** Model output varies. Guard: Distilabel's cache keyed by work item and source SHA, the run manifest, and the rule that a card is judged on what was written, not regenerated.
-- **Exam outlines change.** AZ-104 and AZ-140 skills outlines are revised; a `domain` string can go stale. Guard: `domain` must match the set already used in `dataset/concepts.json` (criterion A4); a new domain string is a hand edit.
-- **Dependency risk.** Distilabel is a third-party library whose maintenance pace can change. Guard: pin the version; keep every gate in plain Python so a swap to a direct API loop touches only steps 4 and 6.
-
-## 6. Acceptance criteria
-
-Each criterion is a check that passes before `scripts/generate.py` is written. All checks run offline except A1.
-
-| ID | Criterion | Check |
-| --- | --- | --- |
-| A1 | Every input path in section 2 exists at the commits in `pins.json`. | `scripts/pin_index.py --check` lists each pinned tree (one git trees API call per source) and fetches the files over raw URLs; exit 0. |
-| A2 | `scripts/schema/proposal.schema.json` exists, and valid and invalid fixtures in `tests/fixtures/generate/` pass and fail as expected. | Unit test. |
-| A3 | Each gate in step 5 is a pure function with at least one passing and one failing fixture per rule, including: an invented registry value (ungrounded), a reworded copy of `avd-scaling-finops` (duplicate), a choice set with a long correct answer (distractor lint), a GUID and a banned product name (leak). | `python3 -m unittest discover -s scripts` runs offline and passes. |
-| A4 | Track and domain values are restricted to those in `dataset/tracks.json` and the domain strings already used in `dataset/concepts.json`. | Unit test on the schema step. |
-| A5 | Grounding rule is defined for claim kinds: a `guidance` or `prior` claim can't support "must", "always" or "required". | Fixture in A3. |
-| A6 | Dedup thresholds are tuned so that, run over today's 39 concepts and 10 scenarios against each other, the gate flags no false duplicates, and flags each of five hand-made near-copies. | Unit test with the five near-copies as fixtures. |
-| A7 | `dataset/pin-index.json` and `tests/pins.test.mjs` exist; every current pin resolves, or the test lists the ones that don't. The 11 older cards that pin a landing zone parameter instead of a row ID are either re-pinned to the row or the index maps parameter to row. | `node --test tests/` passes. |
-| A8 | The leak test in `tests/learn.test.mjs` also checks the banned words from avd-assess `tests/wording.json` at the pin, the family's banned project names, and IPs outside `10.0.0.0/8` minus the `scripts/public-ips.txt` allowlist (today's cards name `168.63.129.16`, Azure's platform DNS address, which is exam content, not estate data). | `node --test tests/learn.test.mjs` passes, and fails on a fixture with a banned word or an unlisted public IP. |
-| A9 | The judge rubric and its pass thresholds (section 3, step 6) are fixed in `scripts/generate.toml`, and a dry run with a stub model shows a failing score drops a proposal. | Unit test with a stub LLM. |
-| A10 | The Distilabel version is pinned, and the step classes and structured-output option used in the design exist in that version. | A short import test against the pinned version. |
-| A11 | Cost guard: the script prints the call count and token estimate, stops without `--yes`, and stops at `--max-calls`. | Unit test with a stub model. |
-| A12 | `--apply` refuses a dirty tree or the default branch, keeps the dataset's formatting, and leaves `node --test tests/learn.test.mjs` green. | Unit test on a temp copy of the repo. |
-| A13 | No step pushes, opens a PR, or writes outside `output/` and `dataset/`. | Code review of the plan before implementation, and a test that runs the pipeline with the network stubbed and lists written paths. |
-
-## 7. Open questions for the owner
-
-1. Is reading avd-assess `references/*.yaml` in scope? The design depends on it (section 2).
-2. Should the 11 older cards be re-pinned from landing zone parameters to row IDs (criterion A7), or should the pin index map parameters to rows?
-3. Which model provider and models for the generator and judge? The spec keeps them in `scripts/generate.toml`.
-4. Does a run need a written estimate and your go each time, like a sandbox run, or only above a call ceiling?
+1. Are `references/*.yaml` in scope (section 5.1)? The grounding design depends on them.
+2. Should the 11 parameter-pinned cards be re-pinned to row IDs, or mapped (criterion 7)?
+3. Which models should the generator and judge use, and does a model API run need a written estimate and your go each time, like a sandbox run?

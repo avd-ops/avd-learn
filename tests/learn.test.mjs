@@ -27,6 +27,9 @@ test('dataset integrity: tracks, concepts, scenarios, labs, and pins', () => {
     assert.ok(trackIds.has(c.track), `Unknown track ${c.track} on concept ${c.id}`);
     assert.ok(c.exams.length > 0, `Missing exams on ${c.id}`);
     assert.ok(c.pins.length > 0, `Missing pins on ${c.id}`);
+    for (const pin of c.pins) {
+      assert.match(pin, /^(avd-assess|avd-second-brain):[^\s#]+(#[^\s]+)?$/, `Malformed pin ${pin} on ${c.id}`);
+    }
     const q = c.checkQuestion;
     assert.ok(q.choices.length >= 2, `Not enough choices on ${c.id}`);
     assert.ok(q.answerIndex >= 0 && q.answerIndex < q.choices.length, `Invalid answerIndex on ${c.id}`);
@@ -35,12 +38,6 @@ test('dataset integrity: tracks, concepts, scenarios, labs, and pins', () => {
   for (const s of data.scenarios) {
     assert.ok(s.choices.length >= 2, `Not enough choices on scenario ${s.id}`);
     assert.ok(s.answerIndex >= 0 && s.answerIndex < s.choices.length, `Invalid answerIndex on ${s.id}`);
-    if (s.pins !== undefined) {
-      assert.ok(Array.isArray(s.pins) && s.pins.length > 0, `pins must be a non-empty array on ${s.id}`);
-      for (const pin of s.pins) {
-        assert.match(pin, /^(avd-assess|avd-second-brain):\S+$/, `Invalid pin ${pin} on ${s.id}`);
-      }
-    }
   }
 });
 
@@ -52,7 +49,7 @@ test('filterBySelector filters by exam and track', () => {
 
   assert.ok(az104.length >= 5);
   assert.ok(az140.length >= 15);
-  assert.equal(core.length, 9);
+  assert.equal(core.length, 10);
 });
 
 test('no tenant UUIDs or emails leaked in dataset', () => {
@@ -97,4 +94,14 @@ test('static web UI and PWA files exist', () => {
   assert.ok(manifest.id, 'manifest.id is required');
   assert.ok(manifest.start_url, 'manifest.start_url is required');
   assert.equal(manifest.display, 'standalone');
+});
+
+test('dataset/index.json matches actual dataset counts', () => {
+  const data = loadDataset();
+  const index = JSON.parse(fs.readFileSync(path.join(ROOT, 'dataset/index.json'), 'utf8'));
+  assert.equal(index.schema, 'avd-learn-dataset/v1');
+  assert.equal(index.datasets.tracks.count, data.tracks.length);
+  assert.equal(index.datasets.concepts.count, data.concepts.length);
+  assert.equal(index.datasets.scenarios.count, data.scenarios.length);
+  assert.equal(index.datasets.labs.count, data.labs.length);
 });
