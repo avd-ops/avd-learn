@@ -1,0 +1,25 @@
+{
+  "id": "./",
+  "name": "avd-learn — AZ-104 & AZ-140 Study",
+  "short_name": "avd-learn",
+  "description": "Ground-up AVD foundations, flashcards, sample exams, and labs mapped to AZ-104 and AZ-140.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f141c",
+  "theme_color": "#005fb8",
+  "icons": [
+    {
+      "src": "./icons/app-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icons/app-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,220 @@
+:root {
+  --bg-light: #f7f9fc;
+  --bg-dark: #0f141c;
+  --surface-light: #ffffff;
+  --surface-dark: #18202c;
+  --text-light: #17202a;
+  --text-dark: #e6edf5;
+  --muted-light: #4f5d6b;
+  --muted-dark: #9fb0c3;
+  --border-light: #d7e0ea;
+  --border-dark: #2c3849;
+  --accent-light: #005fb8;
+  --accent-dark: #4da3ff;
+  --ok-light: #107c10;
+  --ok-dark: #57c957;
+  --warn-light: #b83b00;
+  --warn-dark: #ff8a5c;
+
+  --bg: var(--bg-light);
+  --surface: var(--surface-light);
+  --text: var(--text-light);
+  --muted: var(--muted-light);
+  --border: var(--border-light);
+  --accent: var(--accent-light);
+  --ok: var(--ok-light);
+  --warn: var(--warn-light);
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: var(--bg-dark);
+    --surface: var(--surface-dark);
+    --text: var(--text-dark);
+    --muted: var(--muted-dark);
+    --border: var(--border-dark);
+    --accent: var(--accent-dark);
+    --ok: var(--ok-dark);
+    --warn: var(--warn-dark);
+  }
+}
+
+@supports (color: light-dark(white, black)) {
+  :root {
+    --bg: light-dark(var(--bg-light), var(--bg-dark));
+    --surface: light-dark(var(--surface-light), var(--surface-dark));
+    --text: light-dark(var(--text-light), var(--text-dark));
+    --muted: light-dark(var(--muted-light), var(--muted-dark));
+    --border: light-dark(var(--border-light), var(--border-dark));
+    --accent: light-dark(var(--accent-light), var(--accent-dark));
+    --ok: light-dark(var(--ok-light), var(--ok-dark));
+    --warn: light-dark(var(--warn-light), var(--warn-dark));
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.container {
+  max-width: 980px;
+  margin-inline: auto;
+  padding: 1rem calc(1.25rem + env(safe-area-inset-right)) 1rem calc(1.25rem + env(safe-area-inset-left));
+}
+
+.site-header {
+  background: var(--surface);
+  border-block-end: 1px solid var(--border);
+}
+
+.header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.subtitle {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+select, button {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.8rem;
+  min-height: 44px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+
+.notice {
+  font-size: 0.85rem;
+  color: var(--muted);
+  border-inline-start: 3px solid var(--accent);
+  padding-inline-start: 0.75rem;
+  margin-block: 0.75rem 1.25rem;
+}
+
+.tablist {
+  display: flex;
+  overflow-x: auto;
+  gap: 0.25rem;
+  border-block-end: 1px solid var(--border);
+}
+
+[role="tab"] {
+  position: relative;
+  flex: none;
+  border: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  padding: 0.65rem 1rem;
+  color: var(--muted);
+}
+
+[role="tab"][aria-selected="true"] {
+  color: var(--accent);
+}
+
+[role="tab"][aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  border-block-end: 3px solid var(--accent);
+}
+
+.panel-body {
+  padding-block: 1.25rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  margin-block-end: 1rem;
+}
+
+.meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-block-end: 0.4rem;
+}
+
+.badge {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  font-size: 0.78rem;
+  margin-inline-end: 0.35rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block-start: 0.9rem;
+}
+
+.choice-btn {
+  display: block;
+  width: 100%;
+  text-align: start;
+  margin-block-start: 0.5rem;
+}
+
+.feedback-ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.feedback-warn {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.facts-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+}

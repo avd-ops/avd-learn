@@ -1,0 +1,13 @@
+{
+  "schema": "avd-learn-pins/v1",
+  "sources": {
+    "avd-assess": {
+      "repo": "avd-ops/avd-assess",
+      "commit": "064607c93e9874f848c47e5c74bee77e82e57f4c"
+    },
+    "avd-second-brain": {
+      "repo": "avd-ops/avd-second-brain",
+      "commit": "4c56e3dfc529ba17fc6cf6f9748e4cb468e33054"
+    }
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "schema": "avd-learn-scenarios/v1",
+  "scenarios": [
+    {
+      "id": "scen-logon-storm-fslogix",
+      "title": "9:00 AM Logon Storm: Slow Sign-Ins and Black Screens",
+      "exams": ["AZ-140", "AZ-104"],
+      "difficulty": "intermediate",
+      "facts": {
+        "poolType": "Pooled (Windows 11 Multi-session)",
+        "concurrentMorningLogons": 120,
+        "fslogixStorage": "Standard_LRS Azure Files (1 TiB quota)",
+        "observedQueueDepth": "High SMB latency (>40 ms) during 08:55-09:15",
+        "avdAssessCheck": "profiles / storage-fslogix-io"
+      },
+      "prompt": "120 users sign in between 08:55 and 09:15. Host CPU is 45%, but sign-in takes 90+ seconds and some users get temporary profiles. What is the root cause and primary fix?",
+      "choices": [
+        "Increase session host VM vCPUs from 8 to 16",
+        "Standard_LRS Azure Files is IOPS-throttled during the logon burst; move FSLogix profiles to Premium_LRS (FileStorage) sized for burst IOPS or Azure NetApp Files",
+        "Switch the host pool load balancing algorithm from Breadth-first to Depth-first",
+        "Disable RDP Shortpath on the host pool"
+      ],
+      "answerIndex": 1,
+      "explanation": "FSLogix profile mount/read bursts during a logon storm are IOPS- and latency-bound, not CPU-bound. Standard Azure Files has much lower baseline IOPS and higher tail latency than Premium FileStorage (where provisioned TiB scales IOPS/throughput) or Azure NetApp Files."
+    },
+    {
+      "id": "scen-shortpath-ztna",
+      "title": "High RTT and Choppy Teams Audio for Remote Users",
+      "exams": ["AZ-140"],
+      "difficulty": "intermediate",
+      "facts": {
+        "transportObserved": "TCP/WebSocket Reverse Connect only (no UDP)",
+        "clientSetup": "Corporate laptop running always-on ZTNA/VPN tunnel",
+        "avdHostPoolRdpProperties": "RDP Shortpath enabled for public networks",
+        "avdAssessPillar": "networking-client + protocol"
+      },
+      "prompt": "Remote users experience high round-trip time and choppy Teams audio. Session hosts are healthy, and RDP Shortpath is enabled on the host pool, yet every session falls back to TCP reverse connect. Why?",
+      "choices": [
+        "RDP Shortpath requires Windows 10 Single-session",
+        "The client ZTNA/VPN tunnel is inspecting or blocking outbound UDP / STUN traffic instead of split-tunneling AVD Shortpath endpoints",
+        "Entra Kerberos is not enabled on the storage account",
+        "The host pool is set to Depth-first load balancing"
+      ],
+      "answerIndex": 1,
+      "explanation": "RDP Shortpath uses UDP (STUN/ICE for public networks or direct UDP for private networks). When a client VPN or ZTNA agent forces all traffic into a TCP tunnel or blocks UDP, AVD silently falls back to TCP reverse connect, increasing latency and jitter."
+    },
+    {
+      "id": "scen-entra-kerberos-storage",
+      "title": "Entra-Joined Session Hosts Cannot Mount FSLogix Share",
+      "exams": ["AZ-104", "AZ-140"],
+      "difficulty": "foundational",
+      "facts": {
+        "hostJoinType": "Microsoft Entra ID joined (no line-of-sight to AD DS)",
+        "userIdentities": "Hybrid identities synced from AD DS via Entra Connect",
+        "storageAuth": "None configured on the Azure Files storage account",
+        "avdAssessPillar": "identity + profiles"
+      },
+      "prompt": "Your session hosts are pure Microsoft Entra ID joined with no VPN/line-of-sight to domain controllers. Users are hybrid-synced. FSLogix fails to mount \\\\stcontoso.file.core.windows.net\\profiles with Access Denied. What should you configure?",
+      "choices": [
+        "Enable Microsoft Entra Kerberos on the Azure Files storage account and assign Storage File Data SMB Share Contributor RBAC to the AVD users group",
+        "Join the storage account to a local workgroup",
+        "Switch session hosts to Breadth-first load balancing",
+        "Enable Anonymous Read Access on the file share"
+      ],
+      "answerIndex": 0,
+      "explanation": "Microsoft Entra Kerberos lets hybrid-synced users get Kerberos tickets for Azure Files SMB shares from Entra-joined session hosts without line-of-sight to an AD domain controller—paired with Azure RBAC (Storage File Data SMB Share Contributor) and NTFS permissions."
+    },
+    {
+      "id": "scen-workload-placement",
+      "title": "Choosing Between Pooled AVD, Personal AVD, and Windows 365",
+      "exams": ["AZ-140"],
+      "difficulty": "foundational",
+      "facts": {
+        "groupA": "400 task workers using browser + M365 Apps on shift schedules",
+        "groupB": "25 developers needing local admin, custom SDKs, and predictable flat monthly pricing",
+        "avdSecondBrainRule": "rules/workload-tiers.json"
+      },
+      "prompt": "How should you place Group A and Group B according to Desktop DevOps workload placement principles?",
+      "choices": [
+        "Put both groups on Personal AVD with static 24/7 VMs",
+        "Put Group A on Pooled AVD (Windows 11 Multi-session + Scaling Plan) and Group B on Windows 365 Enterprise (or Personal AVD if GPU/custom Azure VNet control is required)",
+        "Put Group A on Windows 365 Frontline Dedicated and Group B on Pooled AVD",
+        "Put both groups on a single validation host pool"
+      ],
+      "answerIndex": 1,
+      "explanation": "Shift/task workers with standard apps get the best cost density on Pooled AVD multi-session with autoscale. Persistent developers who need dedicated compute, local admin, and predictable per-user licensing fit Windows 365 Enterprise (or Personal AVD when specialized Azure VM SKUs/GPUs are needed)."
+    },
+    {
+      "id": "scen-autoscale-start-vm",
+      "title": "Autoscale Stopped All Hosts Overnight—Morning Users Blocked",
+      "exams": ["AZ-104", "AZ-140"],
+      "difficulty": "intermediate",
+      "facts": {
+        "scalingPlan": "Ramp-down to 0 minimum hosts at 20:00",
+        "startVmOnConnect": "Disabled on Host Pool",
+        "avdAssessCheck": "capacity / control-plane-autoscale"
+      },
+      "prompt": "To save cost, an autoscale plan deallocates all session hosts overnight. Early-bird users trying to sign in before the morning ramp-up window get 'No available resources'. What single setting fixes this?",
+      "choices": [
+        "Set the host pool to Validation Environment = True",
+        "Enable Start VM on Connect on the host pool (and ensure the AVD service principal has the Desktop Virtualization Power On Contributor role)",
+        "Change the scaling plan time zone to UTC",
+        "Switch FSLogix to Cloud Cache"
+      ],
+      "answerIndex": 1,
+      "explanation": "When a scaling plan scales down to 0 active hosts off-peak, Start VM on Connect lets AVD automatically boot a deallocated host when a user connects—provided the Azure Virtual Desktop service principal has the Desktop Virtualization Power On Contributor RBAC role."
+    },
+    {
+      "id": "scen-private-link-dns",
+      "title": "Private Endpoint Deployed, But Storage Still Resolves Publicly",
+      "exams": ["AZ-104", "AZ-140"],
+      "difficulty": "foundational",
+      "facts": {
+        "storageAccount": "stcontosoprofiles (Public network access: Disabled)",
+        "privateEndpoint": "Deployed in snet-pe (10.100.2.x)",
+        "nslookupFromSessionHost": "Resolves to 52.x.x.x (public IP) and SMB mount fails",
+        "avdAssessPillar": "networking-azure"
+      },
+      "prompt": "You disabled public access on the FSLogix storage account and created a Private Endpoint, but session hosts still resolve the public IP and fail to mount profiles. What is the fix?",
+      "choices": [
+        "Re-enable public network access on the storage account",
+        "Create/link the privatelink.file.core.windows.net Private DNS Zone (with an A record for the private IP) to the spoke/hub VNet",
+        "Switch from Premium_LRS to Standard_LRS",
+        "Enable Start VM on Connect"
+      ],
+      "answerIndex": 1,
+      "explanation": "Without a Private DNS Zone (privatelink.file.core.windows.net) linked to the VNet (or forwarded via DNS Private Resolver), session hosts receive the public DNS CNAME/IP and get blocked by the storage firewall."
+    },
+    {
+      "id": "scen-intune-policy-drift",
+      "title": "Workstation Sleep Policy Breaks Pooled Session Hosts",
+      "exams": ["AZ-140"],
+      "difficulty": "intermediate",
+      "facts": {
+        "hostJoinType": "Microsoft Entra ID joined + Intune enrolled",
+        "symptom": "Pooled Windows 11 Multi-session hosts go unresponsive after 30 minutes of idle time",
+        "intuneAssignment": "Corporate Workstation Power Policy assigned to 'All Devices'",
+        "avdAssessMethod": "methods/intune.md"
+      },
+      "prompt": "Pooled AVD session hosts enrolled in Intune randomly drop into sleep/hibernate, disconnecting active users. What is the cleanest fix?",
+      "choices": [
+        "Unenroll all session hosts from Intune",
+        "Use an Intune Assignment Filter to exclude Windows 11 Multi-session (or AVD host prefixes) from workstation power/sleep policies and apply an AVD-specific baseline",
+        "Set maxSessionLimit to 1",
+        "Disable Entra SSO"
+      ],
+      "answerIndex": 1,
+      "explanation": "Workstation power/sleep policies should never apply to AVD session hosts. Intune Assignment Filters cleanly separate multi-session AVD hosts from physical laptops."
+    }
+  ]
+}

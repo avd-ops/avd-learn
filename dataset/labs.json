@@ -1,0 +1,85 @@
+{
+  "schema": "avd-learn-labs/v1",
+  "labs": [
+    {
+      "id": "lab-01-linecheck-and-assess",
+      "order": 1,
+      "title": "Lab 1: Client Network Preflight & Assessment Map (Zero Spend)",
+      "exams": ["AZ-140"],
+      "costEstimate": "$0.00 (no Azure deployment)",
+      "reposUsed": ["avd-linecheck", "avd-assess"],
+      "objective": "Understand AVD required endpoints, client-side latency/jitter, and how avd-assess maps every control plane before deploying anything.",
+      "steps": [
+        "Open https://avd-ops.app/ (or avd-linecheck) from your local machine and run a network check—note RTT, jitter, and endpoint reachability.",
+        "In avd-assess, inspect pillars.yaml and dimensions.yaml to see how networking-client and networking-azure map to Microsoft Learn pins.",
+        "Compare your local network test against the RDP Shortpath / Reverse Connect requirements in avd-assess/methods/network.md."
+      ],
+      "verify": [
+        "You can explain why TCP 443 Reverse Connect succeeds even when UDP Shortpath is blocked.",
+        "You can locate the exact dimension row in avd-assess/dimensions.yaml for enableAvdPrivateLink."
+      ],
+      "gapCheck": "Did any endpoint in avd-linecheck or avd-assess lack a clear explanation for an AZ-140 learner? Log it as a gap in avd-assess or avd-linecheck."
+    },
+    {
+      "id": "lab-02-current-state-c11",
+      "order": 2,
+      "title": "Lab 2: Read-Only Discovery & Redacted C11 Facts",
+      "exams": ["AZ-104", "AZ-140"],
+      "costEstimate": "$0.00 (read-only against an existing/lab subscription)",
+      "reposUsed": ["avd-current-state", "avd-assess"],
+      "objective": "Run avd-current-state read-only in Azure Cloud Shell to inspect what is deployed across all five control planes and validate the redacted C11 output.",
+      "steps": [
+        "Open Azure Cloud Shell (PowerShell) in a throwaway lab subscription.",
+        "Run the avd-current-state single-block collector from its quick start (read-only; makes zero changes).",
+        "Inspect the generated redacted C11 JSON and verify that no tenant IDs, subscription IDs, or user names appear.",
+        "Cross-reference two C11 findings against avd-assess/methods/scoring.md."
+      ],
+      "verify": [
+        "C11 output passes avd-current-state schema validation.",
+        "You can trace a C11 fact back to its plane (azure, entra, intune, m365, or power-platform)."
+      ],
+      "gapCheck": "Did avd-current-state miss an AZ-104/AZ-140 setting you expected to see, or was a C11 field unclear? Record it as a gap for avd-current-state."
+    },
+    {
+      "id": "lab-03-migrate-c14-design",
+      "order": 3,
+      "title": "Lab 3: Target-State Baseline Design (C14 Manifest, Zero Spend)",
+      "exams": ["AZ-140"],
+      "costEstimate": "$0.00 (offline manifest generation)",
+      "reposUsed": ["avd-migrate", "avd-second-brain"],
+      "objective": "Turn C11 facts + workload intake into a C14 target-state manifest for a single pooled host pool.",
+      "steps": [
+        "Open the avd-migrate portal (https://avd-ops.app/migrate/) or CLI.",
+        "Configure a pooled Windows 11 Multi-session host pool: pick VM SKU, maxSessionLimit, FSLogix Premium_LRS quota, and Entra ID join.",
+        "Export the C14 manifest and compare its workload tier assumptions against avd-second-brain/knowledge/rules/workload-tiers.json."
+      ],
+      "verify": [
+        "You have a valid, redacted C14 target-state manifest.",
+        "You can justify your maxSessionLimit and profileShareQuotaGiB choices for an AZ-140 design question."
+      ],
+      "gapCheck": "Were any AZ-140 parameters (e.g., scaling plan, RDP properties, Private Link) missing or hard to understand in avd-migrate? Log it."
+    },
+    {
+      "id": "lab-04-landing-zone-deploy-teardown",
+      "order": 4,
+      "title": "Lab 4: Deploy & Tear Down an AVD Landing Zone in a Throwaway Lab",
+      "exams": ["AZ-104", "AZ-140"],
+      "costEstimate": "Paid Azure resources (~$1-3 for a short 1-2 hour lab session; tear down immediately after)",
+      "reposUsed": ["avd-landing-zone", "avd-current-state"],
+      "objective": "Deploy a minimal AVD landing zone with avd-landing-zone, validate it with avd-current-state, connect a test session, and tear it down cleanly with zero lingering meter.",
+      "steps": [
+        "Use a dedicated throwaway lab subscription. Generate your deployment parameters in https://avd-ops.app/deploy/ (or avd-landing-zone).",
+        "Paste the Cloud Shell deployment block to provision the host pool, workspace, VNet, and FSLogix storage.",
+        "Sign in via the Windows App / Web Client to verify the session and FSLogix VHDX mount.",
+        "Run avd-current-state against the deployed lab to confirm green validation.",
+        "Run the teardown script immediately when finished, keeping teardown logs (-TeardownLogs Keep) and verifying zero running VMs/meters remain."
+      ],
+      "verify": [
+        "Session host registered as Available in the host pool.",
+        "FSLogix profile VHDX created in the Azure Files share.",
+        "Teardown completed with zero billing VMs left behind."
+      ],
+      "gapCheck": "Did any Bicep parameter, RBAC role, or teardown step fail or confuse you? Open an issue/note in avd-landing-zone."
+    }
+  ]
+}

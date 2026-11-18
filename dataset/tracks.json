@@ -1,0 +1,47 @@
+{
+  "schema": "avd-learn-tracks/v1",
+  "tracks": [
+    {
+      "id": "az104-core",
+      "order": 1,
+      "title": "Azure Core Foundations (AZ-104)",
+      "exams": ["AZ-104"],
+      "summary": "Subscriptions, RBAC, Entra ID, VNets, Private DNS, Azure Storage, VMs, and Azure Monitor—the building blocks every AVD estate stands on."
+    },
+    {
+      "id": "avd-architecture",
+      "order": 2,
+      "title": "AVD Architecture & Five Control Planes",
+      "exams": ["AZ-140"],
+      "summary": "Host pools, application groups, workspaces, pooled vs. personal desktops, and how Azure, Entra, Intune, M365, and Power Platform split ownership."
+    },
+    {
+      "id": "avd-identity-network",
+      "order": 3,
+      "title": "Identity, Authentication & Networking",
+      "exams": ["AZ-104", "AZ-140"],
+      "summary": "Entra ID join vs. hybrid join, Entra Kerberos for Azure Files, Conditional Access, RDP Shortpath (UDP), Private Link, and client ZTNA/VPN bypass."
+    },
+    {
+      "id": "avd-profiles-apps",
+      "order": 4,
+      "title": "User Profiles, Storage & App Delivery",
+      "exams": ["AZ-140"],
+      "summary": "FSLogix profile containers, Cloud Cache, Azure Files IOPS sizing, MSIX App Attach, OneDrive Known Folder Move, and Teams VDI optimization."
+    },
+    {
+      "id": "avd-images-scaling",
+      "order": 5,
+      "title": "Images, Intune, Workload Placement & Scaling",
+      "exams": ["AZ-104", "AZ-140"],
+      "summary": "Golden images, validation host pools, Intune enrollment & assignment filters, pooled AVD vs. personal AVD vs. Windows 365, scaling plans, and FinOps."
+    },
+    {
+      "id": "avd-ops-troubleshooting",
+      "order": 6,
+      "title": "Desktop DevOps & Diagnostics",
+      "exams": ["AZ-140"],
+      "summary": "Redacted C11 facts, C14 target state, C25 benchmark distributions, logon storm & storage IOPS triage, and read-first / approve-change governance."
+    }
+  ]
+}

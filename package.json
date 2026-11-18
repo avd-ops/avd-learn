@@ -1,0 +1,10 @@
+{
+  "name": "avd-learn",
+  "version": "0.1.0",
+  "description": "Ground-up AVD foundations dataset and interactive teaching CLI mapped to AZ-104 and AZ-140.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/learn.test.mjs"
+  },
+  "license": "MIT"
+}

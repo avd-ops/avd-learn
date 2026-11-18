@@ -1,0 +1,738 @@
+{
+  "schema": "avd-learn-concepts/v1",
+  "concepts": [
+    {
+      "id": "azure-rbac-scope",
+      "track": "az104-core",
+      "title": "Azure Resource Hierarchy & RBAC Least Privilege",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-104: Manage Azure identities and governance",
+      "plainEnglish": "Azure organizes resources in a strict hierarchy: Management Group -> Subscription -> Resource Group -> Resource. Role-Based Access Control (RBAC) permissions inherit downward, so assigning a role at a higher scope grants it to everything below.",
+      "whyItMatters": "AVD relies on scoped RBAC—for example, Desktop Virtualization User on an Application Group for end users, and Desktop Virtualization Power On Contributor on the subscription or resource group for Start VM on Connect.",
+      "gotchas": [
+        "RBAC is additive; there is no explicit Deny in standard RBAC (Deny comes from Azure Blueprints/Deployment Stacks or Deny Assignments).",
+        "Assigning Owner/Contributor at subscription level violates least privilege and breaks separation of duties across control planes."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#identity",
+        "avd-assess:methods/security.md"
+      ],
+      "checkQuestion": {
+        "prompt": "Which built-in RBAC role is required by the Azure Virtual Desktop service principal to power on deallocated session hosts for Start VM on Connect?",
+        "choices": [
+          "Desktop Virtualization User",
+          "Desktop Virtualization Power On Contributor",
+          "Reader",
+          "Storage File Data SMB Share Contributor"
+        ],
+        "answerIndex": 1,
+        "explanation": "Start VM on Connect requires assigning the Desktop Virtualization Power On Contributor role to the Azure Virtual Desktop service principal at the subscription or resource group scope."
+      }
+    },
+    {
+      "id": "azure-vnet-private-dns",
+      "track": "az104-core",
+      "title": "VNets, Subnets, NSGs & Private DNS Zones",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-104: Configure and manage virtual networking",
+      "plainEnglish": "A Virtual Network (VNet) is your isolated IP space in Azure, carved into subnets. Network Security Groups (NSGs) filter traffic at subnet or NIC level, while Private Link + Private DNS Zones keep traffic to PaaS services (like Azure Files or AVD) on private IPs instead of the public internet.",
+      "whyItMatters": "In an AVD landing zone, session hosts sit in a dedicated spoke subnet (`10.100.x.x`), Private Endpoints sit in a separate subnet, and Private DNS Zones resolve `privatelink.file.core.windows.net` and `privatelink.wvd.microsoft.com` internally.",
+      "gotchas": [
+        "Forgetting to link the Private DNS Zone to the spoke (or hub) VNet causes session hosts to resolve the public IP instead of the Private Endpoint.",
+        "NSGs are stateful, but asymmetric routing through a hub Azure Firewall without UDRs or proper DNS breaks Private Link."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#networking-azure",
+        "avd-assess:methods/network.md"
+      ],
+      "checkQuestion": {
+        "prompt": "You deployed a Private Endpoint for your FSLogix Azure Files storage account, but session hosts still resolve the storage account FQDN to a public IP. What is most likely missing?",
+        "choices": [
+          "A Public IP on each session host",
+          "A Virtual Network Link connecting the privatelink.file.core.windows.net Private DNS Zone to the VNet",
+          "Enabling RDP Shortpath",
+          "A scaling plan"
+        ],
+        "answerIndex": 1,
+        "explanation": "Private Endpoints require a Private DNS Zone (e.g., privatelink.file.core.windows.net) linked to the VNet where DNS queries originate."
+      }
+    },
+    {
+      "id": "azure-storage-files-tiers",
+      "track": "az104-core",
+      "title": "Azure Storage Accounts & Azure Files Performance Tiers",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-104: Implement and manage storage",
+      "plainEnglish": "Azure Files provides managed SMB file shares in the cloud. Standard tiers (Transaction Optimized / Hot / Cool on GPv2) are HDD-backed with shared IOPS limits, whereas Premium (`FileStorage` / `Premium_LRS` or `Premium_ZRS`) is SSD-backed and scales IOPS and throughput directly with the provisioned share size in GiB/TiB.",
+      "whyItMatters": "FSLogix profiles are VHDX files mounted over SMB. During morning logon storms, IOPS and sub-10ms latency determine whether 100 users sign in smoothly or freeze on a black screen.",
+      "gotchas": [
+        "On Premium Azure Files, a tiny 100 GiB share has very low baseline IOPS—provisioned capacity drives performance.",
+        "Standard_LRS is often fine for a 2-person lab, but fails under multi-user logon storms."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#profiles",
+        "avd-assess:dimensions.yaml#profileStorageSku"
+      ],
+      "checkQuestion": {
+        "prompt": "On Premium Azure Files (FileStorage), what directly increases your share's baseline IOPS and throughput?",
+        "choices": [
+          "Adding more CPU cores to the session hosts",
+          "Increasing the provisioned share quota (GiB/TiB)",
+          "Switching from Entra ID join to AD DS join",
+          "Enabling Breadth-first load balancing"
+        ],
+        "answerIndex": 1,
+        "explanation": "Premium Azure Files uses a provisioned capacity model: baseline IOPS, burst IOPS, and throughput scale linearly with the provisioned share size."
+      }
+    },
+    {
+      "id": "avd-core-objects",
+      "track": "avd-architecture",
+      "title": "Host Pools, Session Hosts, App Groups & Workspaces",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Plan and implement an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "AVD separates compute from user publishing using four linked objects: Session Hosts (the VMs) live inside a Host Pool; Application Groups (Desktop or RemoteApp) select what to publish from that pool; and a Workspace bundles Application Groups into the feed users see in the Windows App / Remote Desktop client.",
+      "whyItMatters": "Users are assigned via RBAC (`Desktop Virtualization User`) to Application Groups—not directly to Host Pools or VMs—and an Application Group must be registered to a Workspace for users to see it.",
+      "gotchas": [
+        "A single Host Pool can have multiple RemoteApp groups, but only ONE Desktop Application Group.",
+        "You cannot assign both a RemoteApp group and a Desktop group from the same host pool to the same user if you want clean separation—standard practice is dedicated pools or clear group boundaries."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#capacity",
+        "avd-assess:dimensions.yaml#topology"
+      ],
+      "checkQuestion": {
+        "prompt": "If a user has the Desktop Virtualization User role on an Application Group, why might the desktop icon still not appear in their Windows App feed?",
+        "choices": [
+          "The Application Group is not associated with a Workspace",
+          "FSLogix is not installed",
+          "Start VM on Connect is disabled",
+          "The VM size is not D-series"
+        ],
+        "answerIndex": 0,
+        "explanation": "Users only see resources in their feed when the Application Group is linked to a Workspace (and the user has RBAC access to the Application Group)."
+      }
+    },
+    {
+      "id": "avd-pooled-vs-personal",
+      "track": "avd-architecture",
+      "title": "Pooled vs. Personal Host Pools & Load Balancing",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Plan and implement an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "Pooled host pools share multi-session VMs (e.g., Windows 11 Enterprise multi-session) across many users; Personal host pools assign a dedicated 1:1 VM to each user (Automatic or Direct assignment). Pooled pools balance sessions using Breadth-first (spread evenly for best UX) or Depth-first (fill one host to `maxSessionLimit` before starting the next to save cost).",
+      "whyItMatters": "Choosing Breadth-first vs. Depth-first and setting `maxSessionLimit` directly controls user density, noisy-neighbor risk, and autoscale efficiency.",
+      "gotchas": [
+        "Breadth-first spreads load evenly across all running hosts, which prevents scaling plans from draining hosts unless the scaling plan overrides it during ramp-down.",
+        "Depth-first packs users onto fewer hosts, maximizing cost savings with autoscale, but risks CPU/memory contention if `maxSessionLimit` is set too high."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#capacity",
+        "avd-assess:dimensions.yaml#maxSessionLimit",
+        "avd-second-brain:knowledge/rules/workload-tiers.json"
+      ],
+      "checkQuestion": {
+        "prompt": "Which load balancing algorithm fills one session host up to its maxSessionLimit before routing new connections to the next host?",
+        "choices": [
+          "Breadth-first",
+          "Depth-first",
+          "Round-robin DNS",
+          "Direct assignment"
+        ],
+        "answerIndex": 1,
+        "explanation": "Depth-first saturates one host up to maxSessionLimit before moving to the next, making it ideal for cost-saving ramp-down scenarios."
+      }
+    },
+    {
+      "id": "avd-five-control-planes",
+      "track": "avd-architecture",
+      "title": "The Five Control Planes of an AVD Estate",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Plan and implement an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "An AVD environment is never just Azure VMs—it spans five control planes: Azure (VMs, host pools, storage, Private Link), Entra ID (identities, groups, Conditional Access, Kerberos), Intune (OS policies, compliance, enrollment), Microsoft 365 (OneDrive KFM, Teams VDI, M365 Apps), and Power Platform (day-2 automation/approvals).",
+      "whyItMatters": "In `avd-assess` and `avd-current-state`, every check and remediation hint is tagged with its `plane` so you know which team/repo owns the fix instead of blaming the wrong layer.",
+      "gotchas": [
+        "Deploying AVD infrastructure in Azure without Entra Conditional Access or Intune baselines leaves endpoints and sessions unmanaged.",
+        "Teams VDI audio/video issues are often M365/protocol issues, not Azure VM sizing issues."
+      ],
+      "pins": [
+        "avd-assess:methods/entra.md",
+        "avd-assess:methods/intune.md",
+        "avd-assess:methods/m365.md",
+        "avd-assess:methods/power-platform.md"
+      ],
+      "checkQuestion": {
+        "prompt": "In the avd-assess five-control-plane model, which plane owns Conditional Access policies and Microsoft Entra Kerberos?",
+        "choices": [
+          "Azure",
+          "Entra ID",
+          "Intune",
+          "Power Platform"
+        ],
+        "answerIndex": 1,
+        "explanation": "Entra ID owns identity, security groups, Conditional Access, and Entra Kerberos authentication."
+      }
+    },
+    {
+      "id": "avd-entra-join-vs-hybrid",
+      "track": "avd-identity-network",
+      "title": "Entra ID Join vs. Hybrid Join & Entra Kerberos",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-140: Manage access and security",
+      "plainEnglish": "Session hosts can be Microsoft Entra ID joined (cloud-native, no AD domain controllers needed) or Active Directory / Hybrid joined (traditional GPOs + AD DS). If hosts are Entra-joined and users are hybrid-synced, Microsoft Entra Kerberos lets them authenticate to Azure Files SMB shares without line-of-sight to a domain controller.",
+      "whyItMatters": "Cloud-native Entra ID join removes the need to run domain controllers in Azure just for AVD, while Intune replaces traditional Group Policy Objects (GPOs).",
+      "gotchas": [
+        "Entra-joined hosts require `targetisaadjoined:i:1` in RDP properties (or SSO enabled) for seamless sign-in.",
+        "Pure cloud-only Entra users (not synced from AD) cannot use AD-based NTFS ACLs with Entra Kerberos—check identity requirements carefully."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#identity",
+        "avd-assess:methods/entra.md"
+      ],
+      "checkQuestion": {
+        "prompt": "What does Microsoft Entra Kerberos enable for Microsoft Entra ID-joined AVD session hosts?",
+        "choices": [
+          "Direct RDP Shortpath over UDP",
+          "SMB authentication to Azure Files for hybrid-synced users without line-of-sight to AD domain controllers",
+          "Automatic golden image creation",
+          "Bypassing Conditional Access"
+        ],
+        "answerIndex": 1,
+        "explanation": "Entra Kerberos issues Kerberos tickets from Entra ID so hybrid users on Entra-joined hosts can access Azure Files SMB shares without contacting an AD domain controller."
+      }
+    },
+    {
+      "id": "avd-rdp-shortpath",
+      "track": "avd-identity-network",
+      "title": "Reverse Connect vs. RDP Shortpath (UDP)",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Implement and manage networking for Azure Virtual Desktop",
+      "plainEnglish": "By default, AVD uses Reverse Connect Transport: session hosts make an outbound TCP 443 connection to the AVD Gateway, so you never open inbound ports on your firewall. RDP Shortpath upgrades that session to direct UDP (via STUN/ICE for public networks or direct UDP 3390 for private/ExpressRoute/VPN networks) for much lower latency and better multimedia.",
+      "whyItMatters": "UDP Shortpath dramatically improves interactive responsiveness, mouse/typing feel, and Teams media compared to TCP reverse connect.",
+      "gotchas": [
+        "Client-side ZTNA/VPN agents that force-tunnel or block UDP silently break Shortpath and force fallback to TCP.",
+        "If Shortpath fails, sessions still connect via TCP Reverse Connect—so users complain of 'lag' rather than total outage."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#protocol",
+        "avd-assess:pillars.yaml#networking-client",
+        "avd-assess:methods/remote-protocols.md"
+      ],
+      "checkQuestion": {
+        "prompt": "Why does AVD Reverse Connect not require opening inbound firewall ports to session hosts?",
+        "choices": [
+          "It uses UDP port 3389 inbound",
+          "The AVD agent on the session host initiates outbound TCP 443 connections to the AVD control plane",
+          "It requires a public IP on every VM",
+          "It uses Azure Bastion"
+        ],
+        "answerIndex": 1,
+        "explanation": "Reverse Connect initiates outbound TLS (TCP 443) from the session host to the AVD service, avoiding any inbound internet exposure."
+      }
+    },
+    {
+      "id": "avd-conditional-access-sso",
+      "track": "avd-identity-network",
+      "title": "Conditional Access & Single Sign-On (SSO) for AVD",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-140: Manage access and security",
+      "plainEnglish": "Entra Conditional Access enforces MFA, compliant devices, or trusted locations at sign-in. Targeting the 'Azure Virtual Desktop' cloud app (and 'Windows Cloud Login' when Entra SSO is enabled) ensures users satisfy MFA once and pass through to the Windows session seamlessly.",
+      "whyItMatters": "Without Entra SSO, users get prompted twice (once for the AVD client feed, once for Windows login). With SSO + Conditional Access, you get strong Zero Trust security with a single prompt.",
+      "gotchas": [
+        "Excluding or misconfiguring 'Windows Cloud Login' in Conditional Access can cause unexpected MFA loops or blocked sign-ins.",
+        "Per-user legacy MFA breaks SSO; always use Conditional Access."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#identity",
+        "avd-assess:methods/entra.md",
+        "avd-assess:methods/security.md"
+      ],
+      "checkQuestion": {
+        "prompt": "Which Entra ID feature enforces MFA and device compliance checks before a user can access an AVD workspace?",
+        "choices": [
+          "Azure Files SMB Multichannel",
+          "Microsoft Entra Conditional Access",
+          "FSLogix Cloud Cache",
+          "Breadth-first load balancing"
+        ],
+        "answerIndex": 1,
+        "explanation": "Conditional Access evaluates user, device, and location signals and enforces MFA or compliance before issuing tokens for Azure Virtual Desktop."
+      }
+    },
+    {
+      "id": "avd-fslogix-containers",
+      "track": "avd-profiles-apps",
+      "title": "FSLogix Profile Containers & Redirections",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Implement and manage user environments and apps",
+      "plainEnglish": "On pooled multi-session hosts, users land on a different VM every day. FSLogix stores the user's entire Windows profile inside a VHD/VHDX container on a file share (like Azure Files or Azure NetApp Files) and dynamically attaches it at sign-in so the desktop feels persistent.",
+      "whyItMatters": "Without FSLogix, users lose settings, Outlook caches, and Edge profiles on every sign-in—or bloat local OS disks.",
+      "gotchas": [
+        "Always exclude Teams caches, temp folders, and OneDrive local cache where appropriate (`redirections.xml`) so VHDX containers don't bloat.",
+        "FSLogix Cloud Cache adds resilience across multiple storage providers, at the cost of extra local disk I/O and cache overhead."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#profiles",
+        "avd-assess:dimensions.yaml#fslogixProfileSizeMiB"
+      ],
+      "checkQuestion": {
+        "prompt": "What problem do FSLogix Profile Containers solve in a pooled AVD host pool?",
+        "choices": [
+          "They replace the Azure Load Balancer",
+          "They attach a user's profile VHDX from shared storage at sign-in so settings persist across non-persistent session hosts",
+          "They automatically patch Windows 11",
+          "They convert TCP traffic into UDP"
+        ],
+        "answerIndex": 1,
+        "explanation": "FSLogix mounts a remote VHD/VHDX container as the user's local profile at logon, giving persistent user state on pooled VMs."
+      }
+    },
+    {
+      "id": "avd-msix-app-attach",
+      "track": "avd-profiles-apps",
+      "title": "App Attach / MSIX App Attach",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Implement and manage user environments and apps",
+      "plainEnglish": "Instead of baking every application into a monolithic golden image, App Attach (and MSIX App Attach) stores packaged apps in VHDX/CIM images on shared storage and dynamically mounts them onto session hosts at sign-in or host startup.",
+      "whyItMatters": "Decoupling apps from the OS image dramatically reduces the number of golden images you must maintain and update.",
+      "gotchas": [
+        "Not every legacy Win32 installer converts cleanly to MSIX—test app compatibility before committing to App Attach.",
+        "Session hosts need read access (and certificates if self-signed) to the App Attach storage share."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#app-delivery",
+        "avd-second-brain:knowledge/catalog/apps.json"
+      ],
+      "checkQuestion": {
+        "prompt": "What is the primary operational benefit of App Attach / MSIX App Attach in AVD?",
+        "choices": [
+          "It eliminates the need for Azure Virtual Networks",
+          "It separates application delivery from the OS golden image by dynamically mounting app packages at runtime",
+          "It replaces Entra ID authentication",
+          "It increases VM vCPU count"
+        ],
+        "answerIndex": 1,
+        "explanation": "App Attach decouples apps from the base OS image, reducing golden image sprawl and simplifying app updates."
+      }
+    },
+    {
+      "id": "avd-m365-onedrive-teams",
+      "track": "avd-profiles-apps",
+      "title": "OneDrive Known Folder Move & Teams VDI Optimization",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Implement and manage user environments and apps",
+      "plainEnglish": "Redirecting Desktop, Documents, and Pictures to OneDrive (Known Folder Move + Files On-Demand) keeps user files out of the FSLogix VHDX, shrinking profile sizes. Meanwhile, Teams VDI WebRTC optimization offloads audio/video encoding from the Azure VM directly to the user's local endpoint.",
+      "whyItMatters": "Without Teams media optimization, video calls route through the session host CPU and double-hop over RDP—crushing host density and call quality.",
+      "gotchas": [
+        "Teams VDI optimization requires the Remote Desktop WebRTC Redirector Service installed on the session host AND a supported client.",
+        "Install M365 Apps on multi-session hosts with Shared Computer Licensing enabled."
+      ],
+      "pins": [
+        "avd-assess:methods/m365.md",
+        "avd-assess:pillars.yaml#protocol"
+      ],
+      "checkQuestion": {
+        "prompt": "What happens if Teams VDI WebRTC media optimization is missing on a multi-session host pool?",
+        "choices": [
+          "OneDrive stops syncing",
+          "Audio/video processing falls back to the session host CPU and hairpins through the RDP channel, degrading call quality and host density",
+          "FSLogix fails to mount",
+          "Private DNS stops resolving"
+        ],
+        "answerIndex": 1,
+        "explanation": "Media optimization offloads WebRTC audio/video to the client endpoint; without it, the session host CPU encodes media and sends it over RDP."
+      }
+    },
+    {
+      "id": "avd-images-validation-pool",
+      "track": "avd-images-scaling",
+      "title": "Golden Images, Azure Compute Gallery & Validation Pools",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Create and configure session host images",
+      "plainEnglish": "A golden image is your standardized Windows 11 Multi-session OS template (with M365, FSLogix agent, and OS optimizations), stored and replicated via Azure Compute Gallery. Before pushing a new image or AVD agent update to production, you test it in a Validation Host Pool.",
+      "whyItMatters": "Setting `validationEnvironment: true` on a test host pool lets Microsoft roll out AVD service/agent updates there first, catching regressions before production users are hit.",
+      "gotchas": [
+        "Never capture a golden image from a domain-joined VM without generalizing (`sysprep`)—and better yet, build images cleanly via pipeline/Packer or Azure VM Image Builder.",
+        "Remember to replicate Compute Gallery image versions to every Azure region where you deploy session hosts."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#images",
+        "avd-assess:dimensions.yaml#validationEnvironment"
+      ],
+      "checkQuestion": {
+        "prompt": "What does setting Validation Environment = True on an AVD host pool do?",
+        "choices": [
+          "It disables FSLogix",
+          "It receives AVD agent and service updates earlier than non-validation pools so you can test before production rollout",
+          "It enables nested virtualization",
+          "It forces Depth-first load balancing"
+        ],
+        "answerIndex": 1,
+        "explanation": "Validation host pools receive AVD service/agent updates first so admins can validate changes before they reach production pools."
+      }
+    },
+    {
+      "id": "avd-workload-placement",
+      "track": "avd-images-scaling",
+      "title": "Workload Placement: Pooled AVD vs. Personal AVD vs. W365",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Plan and implement an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "Not every user belongs on the same cloud desktop. Pooled AVD excels for shift/task workers sharing compute; Personal AVD fits users needing dedicated VMs, custom Azure VNet/GPU SKUs, or local admin; Windows 365 Enterprise fits knowledge workers who want predictable per-user monthly pricing managed entirely through Intune.",
+      "whyItMatters": "In `avd-second-brain`, workload placement rules (`rules/workload-tiers.json`) match persona requirements (concurrency, GPU, local admin, cost predictability) to the right tier.",
+      "gotchas": [
+        "Putting 24/7 dedicated users on Personal AVD without autoscale/hibernation can cost more than Windows 365 Enterprise.",
+        "Trying to force incompatible legacy single-user apps onto Windows 11 Multi-session causes stability issues."
+      ],
+      "pins": [
+        "avd-assess:methods/use-cases.md",
+        "avd-second-brain:knowledge/rules/workload-tiers.json"
+      ],
+      "checkQuestion": {
+        "prompt": "Which option best fits a shift-based call center of 300 workers using browser + M365 apps with overlapping 8-hour shifts?",
+        "choices": [
+          "Windows 365 Enterprise 8vCPU for all 300 users",
+          "Pooled AVD (Windows 11 Multi-session) with an autoscale scaling plan",
+          "Personal AVD running 24/7",
+          "Azure Bastion jumpboxes"
+        ],
+        "answerIndex": 1,
+        "explanation": "Pooled AVD with multi-session hosts and a scaling plan maximizes concurrency and shuts down idle hosts between shifts."
+      }
+    },
+    {
+      "id": "avd-scaling-finops",
+      "track": "avd-images-scaling",
+      "title": "Autoscale Scaling Plans, Start VM on Connect & FinOps",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-140: Monitor and maintain an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "AVD Scaling Plans automate host power state across four phases: Ramp-up (boot hosts before shift), Peak (keep capacity ready), Ramp-down (drain and deallocate idle hosts), and Off-peak (minimum hosts, often 0). Pair with Start VM on Connect so off-peak users can still wake a host on demand.",
+      "whyItMatters": "Compute is the largest cost in AVD. Deallocating idle hosts stops VM compute billing (you only pay for OS disks), and pairing budgets + action groups prevents surprise spend.",
+      "gotchas": [
+        "Deallocating a VM stops compute charges, but managed OS disks and storage quotas still bill.",
+        "Always check that the scaling plan is assigned to the host pool AND the AVD service principal has the required RBAC role."
+      ],
+      "pins": [
+        "avd-assess:methods/finops.md",
+        "avd-assess:dimensions.yaml#startVmOnConnect"
+      ],
+      "checkQuestion": {
+        "prompt": "If a scaling plan deallocates all session hosts during Off-peak hours, which feature allows an early-morning user to still connect?",
+        "choices": [
+          "Breadth-first load balancing",
+          "Start VM on Connect",
+          "Private Link",
+          "MSIX App Attach"
+        ],
+        "answerIndex": 1,
+        "explanation": "Start VM on Connect wakes a deallocated session host automatically when an authorized user initiates a session."
+      }
+    },
+    {
+      "id": "avd-contracts-c11-c14",
+      "track": "avd-ops-troubleshooting",
+      "title": "Contracts C11 (Current State) & C14 (Target State)",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Monitor and maintain an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "In the avd-ops family, repos never share live tenant secrets—they pass versioned, redacted JSON contracts. `C11` captures 'what is there now' (collected read-only by `avd-current-state`), and `C14` captures 'what we want to build' (read by `avd-landing-zone`).",
+      "whyItMatters": "Redacted contracts let you reason about sizing, drift, and security posture across all five control planes without leaking tenant IDs, subscription IDs, or user names.",
+      "gotchas": [
+        "Never put real tenant IDs, subscription IDs, IPs, or customer names into public repos or shared C11/C14 examples.",
+        "Dependencies point down: `avd-current-state` and `avd-landing-zone` work standalone without `avd-second-brain` or `avd-swarm`."
+      ],
+      "pins": [
+        "avd-assess:contracts/README.md",
+        "avd-second-brain:docs/contracts.md"
+      ],
+      "checkQuestion": {
+        "prompt": "In the AVD family contract model, what does Contract C11 represent?",
+        "choices": [
+          "A raw Azure AD password dump",
+          "Redacted current-state facts collected read-only across the five control planes",
+          "A Terraform state file with secrets",
+          "A billing invoice"
+        ],
+        "answerIndex": 1,
+        "explanation": "Contract C11 is the versioned, redacted snapshot of an environment's current state collected read-only by avd-current-state."
+      }
+    },
+    {
+      "id": "avd-benchmark-c25",
+      "track": "avd-ops-troubleshooting",
+      "title": "Benchmarking & C25 Empirical Evidence",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Monitor and maintain an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "Rather than guessing 'how many users fit on a D8s_v5' or 'how fast does FSLogix mount', `avd-benchmark` runs synthetic profiles (storage I/O, logon storm, multi-session density, autoscale, BCDR) and publishes redacted `C25` percentile distributions (p50/p95/p99) into `avd-assess`.",
+      "whyItMatters": "Empirical percentiles turn guesswork ('it feels slow') into measurable baselines you can compare against your own Azure Monitor / AVD Insights telemetry.",
+      "gotchas": [
+        "Averages hide logon storms—always look at p95 and p99 latency.",
+        "Synthetic benchmarks calibrate priors, but real-world LOB apps must still be validated with a pilot wave."
+      ],
+      "pins": [
+        "avd-assess:methods/targets-benchmarks.md",
+        "avd-assess:methods/sample-check.md"
+      ],
+      "checkQuestion": {
+        "prompt": "Why do AVD benchmark profiles (C25) track p95/p99 percentiles instead of only averages?",
+        "choices": [
+          "Averages cannot be computed in PowerShell",
+          "Averages hide tail latency spikes during burst events like morning logon storms",
+          "p99 is required by Entra Kerberos",
+          "Percentiles reduce VM disk size"
+        ],
+        "answerIndex": 1,
+        "explanation": "Logon storms and I/O contention affect tail latency (p95/p99) far more severely than the daily average."
+      }
+    },
+    {
+      "id": "avd-read-first-governance",
+      "track": "avd-ops-troubleshooting",
+      "title": "Read First, Change With Approval & Never Leave the Meter Running",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-104: Manage Azure identities and governance",
+      "plainEnglish": "Safe cloud operations follow two rules: reading/assessing state is always free and safe, while any state-changing action requires an explicit human-approved plan; and any lab/sandbox deployment must tear down or stop billing when done without deleting the last copy of logs/evidence.",
+      "whyItMatters": "This is the core operating model of `avd-second-brain` ('the brain thinks') and `avd-swarm` ('the swarm acts only on approved plans'), and it protects your own AZ-104/AZ-140 study labs from runaway Azure bills.",
+      "gotchas": [
+        "Deleting a resource group removes VMs, but orphaned disks, public IPs, or Log Analytics retention can still incur charges if not audited.",
+        "Always keep redacted evidence/logs outside the deployment before tearing down a lab."
+      ],
+      "pins": [
+        "avd-assess:methods/remediation.md",
+        "avd-second-brain:docs/knowledge/decisions/0003-brain-thinks-swarm-acts.md"
+      ],
+      "checkQuestion": {
+        "prompt": "In the Desktop DevOps model, what is the boundary between avd-second-brain and avd-swarm?",
+        "choices": [
+          "avd-second-brain holds Owner credentials and deploys VMs directly",
+          "avd-second-brain never holds write credentials (it reasons/remembers), while avd-swarm only executes plans approved by a person",
+          "avd-swarm bypasses RBAC",
+          "Neither repo uses contracts"
+        ],
+        "answerIndex": 1,
+        "explanation": "The brain thinks (read-only memory and reasoning) and the swarm acts only through human-approved plans."
+      }
+    },
+    {
+      "id": "az104-monitor-insights",
+      "track": "az104-core",
+      "title": "Azure Monitor, Log Analytics & AVD Insights",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-104: Monitor and maintain Azure resources",
+      "plainEnglish": "Azure Monitor collects platform metrics and activity logs, while a Log Analytics Workspace stores diagnostic logs and VM performance counters (via Azure Monitor Agent / Data Collection Rules). AVD Insights sits on top as a prebuilt workbook visualizing connection diagnostics, round-trip time (RTT), host capacity, and FSLogix/session health.",
+      "whyItMatters": "Without Diagnostic Settings sending AVD host pool logs and VM perf counters to Log Analytics, you are flying blind during logon storms or protocol lag.",
+      "gotchas": [
+        "Legacy Log Analytics agent (MMA) is retired—use Azure Monitor Agent (AMA) with Data Collection Rules (DCRs).",
+        "Long Log Analytics retention windows can quietly become a major recurring cost if left unbounded."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#ux-measurement",
+        "avd-assess:methods/diagnostics.md"
+      ],
+      "checkQuestion": {
+        "prompt": "What must be configured for AVD Insights to display session host performance counters and connection diagnostics?",
+        "choices": [
+          "A Public IP on every session host",
+          "Diagnostic settings on AVD objects + Azure Monitor Agent (AMA) / Data Collection Rules sending data to a Log Analytics Workspace",
+          "Entra Kerberos",
+          "MSIX App Attach"
+        ],
+        "answerIndex": 1,
+        "explanation": "AVD Insights reads AVD service diagnostic logs and session host performance counters stored in a Log Analytics Workspace."
+      }
+    },
+    {
+      "id": "az104-backup-bcdr",
+      "track": "az104-core",
+      "title": "Azure Backup, Snapshots & BCDR for AVD",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-104: Monitor and maintain Azure resources",
+      "plainEnglish": "In AVD, you rarely back up pooled session host VMs because they are stateless and rebuilt from a golden image. Instead, you back up the stateful layers: FSLogix Azure Files shares (via Azure Backup / Recovery Services Vault snapshots), personal persistent VMs, and your IaC/golden image definitions.",
+      "whyItMatters": "Backing up 50 stateless pooled VMs wastes money; losing the FSLogix file share without snapshots loses every user's profile.",
+      "gotchas": [
+        "Deleting an Azure Files share or storage account without soft delete / vault retention destroys profiles immediately.",
+        "Cross-region BCDR requires either Cloud Cache / GRS-ZRS replication for profiles plus secondary-region host pool capacity."
+      ],
+      "pins": [
+        "avd-assess:methods/reliability.md",
+        "avd-assess:dimensions.yaml#enableProfileBackup"
+      ],
+      "checkQuestion": {
+        "prompt": "In a pooled AVD deployment, which component is the highest priority for regular Azure Backup snapshots?",
+        "choices": [
+          "Stateless pooled session host OS disks",
+          "The Azure Files share storing FSLogix profile containers",
+          "The AVD Workspace object",
+          "The NSG rules"
+        ],
+        "answerIndex": 1,
+        "explanation": "Pooled session hosts are stateless and redeployable from golden images; FSLogix profile containers hold stateful user data."
+      }
+    },
+    {
+      "id": "az104-bastion-admin-access",
+      "track": "az104-core",
+      "title": "Azure Bastion & Secure Admin Access",
+      "exams": ["AZ-104"],
+      "domain": "AZ-104: Configure and manage virtual networking",
+      "plainEnglish": "Azure Bastion provides browser-based RDP/SSH into VMs over TLS (port 443) through the Azure portal without assigning Public IPs to your VMs or opening port 3389/22 to the internet.",
+      "whyItMatters": "Session hosts and jumpboxes in a secure AVD landing zone never have Public IPs; admins use Bastion (or private VPN/ExpressRoute) for break-glass troubleshooting.",
+      "gotchas": [
+        "Azure Bastion requires a dedicated subnet named exactly `AzureBastionSubnet` (minimum `/26`).",
+        "Bastion bills hourly while deployed—tear it down or use Bastion Developer/on-demand in throwaway labs."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#networking-azure",
+        "avd-assess:dimensions.yaml#deployJumpbox"
+      ],
+      "checkQuestion": {
+        "prompt": "What is the mandatory subnet name required when deploying Azure Bastion into a Virtual Network?",
+        "choices": [
+          "GatewaySubnet",
+          "AzureBastionSubnet",
+          "AzureFirewallSubnet",
+          "BastionHostSubnet"
+        ],
+        "answerIndex": 1,
+        "explanation": "Azure Bastion requires a dedicated subnet named exactly AzureBastionSubnet."
+      }
+    },
+    {
+      "id": "avd-firewall-udr-egress",
+      "track": "avd-identity-network",
+      "title": "Hub-Spoke Egress, Azure Firewall & UDRs",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-140: Implement and manage networking for Azure Virtual Desktop",
+      "plainEnglish": "In enterprise hub-spoke topologies, session hosts in a spoke VNet route internet-bound traffic through a hub Azure Firewall using a User-Defined Route (UDR: `0.0.0.0/0 -> Firewall Private IP`). The firewall must allow required AVD FQDN tags/service tags (`WindowsVirtualDesktop`, `AzureMonitor`, Entra, and Microsoft 365 endpoints).",
+      "whyItMatters": "Blocking even one required AVD control-plane FQDN causes session hosts to show as Unavailable or fail agent registration.",
+      "gotchas": [
+        "Do NOT perform TLS inspection on AVD control-plane/gateway FQDNs—certificate pinning breaks the agent.",
+        "Always check `avd-assess` endpoint map (`endpoints.yaml`) for required outbound FQDNs."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#networking-azure",
+        "avd-assess:endpoints.yaml"
+      ],
+      "checkQuestion": {
+        "prompt": "What happens if an Azure Firewall performs TLS inspection on AVD control-plane traffic?",
+        "choices": [
+          "RDP Shortpath becomes faster",
+          "Session hosts fail to register or connect because the AVD agent rejects untrusted/inspected certificates",
+          "FSLogix automatically compresses VHDX files",
+          "Intune enrollment speeds up"
+        ],
+        "answerIndex": 1,
+        "explanation": "AVD control-plane traffic must bypass TLS inspection; replacing certificates breaks the AVD agent's trust."
+      }
+    },
+    {
+      "id": "avd-rdp-properties-redirection",
+      "track": "avd-identity-network",
+      "title": "RDP Properties & Device Redirection Hardening",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Manage access and security",
+      "plainEnglish": "Host Pool RDP Properties control session behavior at connection time—such as whether users can redirect local drives (`drivestoredirect:s:`), clipboard (`redirectclipboard:i:`), printers (`redirectprinters:i:`), USB devices, or cameras, and whether Entra SSO (`enablerdsaadauth:i:1`) is enabled.",
+      "whyItMatters": "Blocking local drive and clipboard redirection prevents data exfiltration from corporate AVD sessions to unmanaged personal endpoints.",
+      "gotchas": [
+        "Disabling `redirectclipboard` hurts UX if users need copy/paste—balance security with persona needs, or restrict it only for unmanaged devices.",
+        "Microphone/camera redirection must remain enabled for Teams VDI calls."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#protocol",
+        "avd-assess:dimensions.yaml#rdpProperties"
+      ],
+      "checkQuestion": {
+        "prompt": "Which RDP property setting prevents users from mapping their local PC's C: drive into an AVD session?",
+        "choices": [
+          "drivestoredirect:s:",
+          "enablerdsaadauth:i:1",
+          "audiocapturemode:i:1",
+          "use multimon:i:1"
+        ],
+        "answerIndex": 0,
+        "explanation": "Setting drivestoredirect:s: (empty value) disables local drive redirection into the remote session."
+      }
+    },
+    {
+      "id": "avd-fslogix-cloud-cache",
+      "track": "avd-profiles-apps",
+      "title": "FSLogix Cloud Cache & Multi-Region Resilience",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Implement and manage user environments and apps",
+      "plainEnglish": "FSLogix Cloud Cache (`CCDLocations`) writes profile changes to a local cache on the session host first and asynchronously replicates them to one or more remote SMB/Blob storage providers. If one file share goes down, users keep working from the local cache or secondary provider.",
+      "whyItMatters": "Cloud Cache protects against transient SMB hiccups and enables active-active multi-region AVD profile resilience.",
+      "gotchas": [
+        "Cloud Cache increases local session host OS/temp disk I/O and delays logoff slightly while flushing dirty blocks.",
+        "Do NOT configure both `VHDLocations` and `CCDLocations` simultaneously—Cloud Cache replaces `VHDLocations`."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#profiles",
+        "avd-assess:methods/reliability.md"
+      ],
+      "checkQuestion": {
+        "prompt": "Which FSLogix registry setting enables Cloud Cache across multiple storage providers?",
+        "choices": [
+          "VHDLocations",
+          "CCDLocations",
+          "FlipFlopProfileDirectoryName",
+          "DeleteLocalProfileWhenVHDShouldApply"
+        ],
+        "answerIndex": 1,
+        "explanation": "CCDLocations configures FSLogix Cloud Cache providers; it replaces VHDLocations."
+      }
+    },
+    {
+      "id": "avd-intune-filters",
+      "track": "avd-images-scaling",
+      "title": "Intune Enrollment & Assignment Filters for AVD",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Create and configure session host images",
+      "plainEnglish": "When Entra-joined AVD session hosts enroll in Microsoft Intune, Assignment Filters let you target policies specifically to `Windows 11 Multi-session` or specific host pool naming prefixes—without waiting for slow dynamic Entra groups to recalculate.",
+      "whyItMatters": "Applying a single-user workstation BitLocker or sleep/hibernation policy to a multi-session AVD host can break sessions or lock out users.",
+      "gotchas": [
+        "Multi-session Windows 11 supports device-targeted Intune policies well, while user-targeted policies have specific multi-session caveats.",
+        "Assignment filters evaluate at policy check-in time, making them much faster and safer than nested dynamic groups."
+      ],
+      "pins": [
+        "avd-assess:methods/intune.md",
+        "avd-assess:dimensions.yaml#enrollInIntune"
+      ],
+      "checkQuestion": {
+        "prompt": "Why are Intune Assignment Filters preferred over dynamic Entra groups for targeting AVD session host policies?",
+        "choices": [
+          "Dynamic groups cannot contain Windows VMs",
+          "Assignment filters evaluate at device check-in without dynamic group membership recalculation lag, allowing fast, precise targeting by OS SKU or device name",
+          "Assignment filters replace Entra RBAC",
+          "Filters automatically create FSLogix shares"
+        ],
+        "answerIndex": 1,
+        "explanation": "Assignment filters evaluate dynamically at check-in against device properties (like OS SKU or name), avoiding dynamic group sync delays."
+      }
+    },
+    {
+      "id": "az104-policy-guardrails",
+      "track": "az104-core",
+      "title": "Azure Policy Guardrails & Allowed Locations",
+      "exams": ["AZ-104"],
+      "domain": "AZ-104: Manage Azure identities and governance",
+      "plainEnglish": "Azure Policy evaluates resource properties at deployment time and continuously afterward—enforcing rules like 'Allowed locations', 'Require cost-center tag', or 'Deny public IPs on NICs'. Unlike RBAC (which controls WHO can act), Azure Policy controls WHAT configurations are allowed.",
+      "whyItMatters": "In an AVD landing zone, Azure Policy guardrails (`enablePolicyGuardrails`) prevent someone with Contributor access from accidentally deploying a Public IP on a session host or spinning up GPUs in an unapproved region.",
+      "gotchas": [
+        "RBAC + Policy work together: even an Owner cannot bypass a Deny policy without modifying the policy assignment.",
+        "Audit/Modify effects are safer to roll out first before switching to Deny."
+      ],
+      "pins": [
+        "avd-assess:methods/security.md",
+        "avd-assess:dimensions.yaml#enablePolicyGuardrails"
+      ],
+      "checkQuestion": {
+        "prompt": "What is the difference between Azure RBAC and Azure Policy?",
+        "choices": [
+          "RBAC controls who can perform actions on resources; Azure Policy enforces rules on the allowed properties and compliance state of resources",
+          "Azure Policy replaces Entra ID",
+          "RBAC only works on storage accounts",
+          "There is no difference"
+        ],
+        "answerIndex": 0,
+        "explanation": "RBAC governs user/principal permissions (who), while Azure Policy governs resource configuration compliance (what)."
+      }
+    }
+  ]
+}

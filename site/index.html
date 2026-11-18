@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#005fb8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>avd-learn — AZ-104 &amp; AZ-140 Study Companion</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/app-192.png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div>
+        <h1>avd-learn</h1>
+        <p class="subtitle">Ground-up AVD Foundations, AZ-104 &amp; AZ-140 Study Companion</p>
+      </div>
+      <div class="filters">
+        <label for="exam-filter">Exam:</label>
+        <select id="exam-filter">
+          <option value="all">All (AZ-104 + AZ-140)</option>
+          <option value="AZ-104">AZ-104</option>
+          <option value="AZ-140">AZ-140</option>
+        </select>
+        <label for="track-filter">Track:</label>
+        <select id="track-filter">
+          <option value="all">All Tracks</option>
+        </select>
+        <button id="install-app" type="button" class="primary" hidden>Install app</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <p id="install-status" class="meta" role="status"></p>
+    <p class="notice">
+      Personal study tool, not for production, not affiliated with the author's employer or Microsoft.
+      Zero tenant data; pins <code>avd-assess</code> &amp; <code>avd-second-brain</code>.
+    </p>
+
+    <div class="tabs">
+      <div role="tablist" aria-label="Study modes" class="tablist">
+        <button type="button" role="tab" id="tab-study" aria-selected="true" tabindex="0">Study Guide</button>
+        <button type="button" role="tab" id="tab-flashcards" aria-selected="false" tabindex="-1">Flashcards</button>
+        <button type="button" role="tab" id="tab-exam" aria-selected="false" tabindex="-1">Sample Exam</button>
+        <button type="button" role="tab" id="tab-labs" aria-selected="false" tabindex="-1">Hands-On Labs</button>
+        <button type="button" role="tab" id="tab-diagnose" aria-selected="false" tabindex="-1">Diagnose (C11)</button>
+      </div>
+
+      <section role="tabpanel" id="panel-study" aria-labelledby="tab-study">
+        <div class="panel-body" id="study-content">Loading study guide…</div>
+      </section>
+
+      <section role="tabpanel" id="panel-flashcards" aria-labelledby="tab-flashcards" hidden>
+        <div class="panel-body" id="flashcards-content">Loading flashcards…</div>
+      </section>
+
+      <section role="tabpanel" id="panel-exam" aria-labelledby="tab-exam" hidden>
+        <div class="panel-body" id="exam-content">Loading sample exam…</div>
+      </section>
+
+      <section role="tabpanel" id="panel-labs" aria-labelledby="tab-labs" hidden>
+        <div class="panel-body" id="labs-content">Loading labs…</div>
+      </section>
+
+      <section role="tabpanel" id="panel-diagnose" aria-labelledby="tab-diagnose" hidden>
+        <div class="panel-body" id="diagnose-content">Loading scenarios…</div>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
