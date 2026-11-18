@@ -38,14 +38,19 @@
 
     <div class="tabs">
       <div role="tablist" aria-label="Study modes" class="tablist">
-        <button type="button" role="tab" id="tab-study" aria-selected="true" tabindex="0">Study</button>
+        <button type="button" role="tab" id="tab-overview" aria-selected="true" tabindex="0">Overview</button>
+        <button type="button" role="tab" id="tab-study" aria-selected="false" tabindex="-1">Study</button>
         <button type="button" role="tab" id="tab-flashcards" aria-selected="false" tabindex="-1">Flashcards</button>
         <button type="button" role="tab" id="tab-exam" aria-selected="false" tabindex="-1">Exam</button>
         <button type="button" role="tab" id="tab-labs" aria-selected="false" tabindex="-1">Labs</button>
         <button type="button" role="tab" id="tab-diagnose" aria-selected="false" tabindex="-1">Diagnose</button>
       </div>
 
-      <section role="tabpanel" id="panel-study" aria-labelledby="tab-study">
+      <section role="tabpanel" id="panel-overview" aria-labelledby="tab-overview">
+        <div class="panel-body" id="overview-content">Loading…</div>
+      </section>
+
+      <section role="tabpanel" id="panel-study" aria-labelledby="tab-study" hidden>
         <div class="panel-body" id="study-content">Loading…</div>
       </section>
 
