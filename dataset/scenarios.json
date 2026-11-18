@@ -146,6 +146,82 @@
       ],
       "answerIndex": 1,
       "explanation": "Workstation power/sleep policies should never apply to AVD session hosts. Intune Assignment Filters cleanly separate multi-session AVD hosts from physical laptops."
+    },
+    {
+      "id": "scen-ephemeral-autoscale",
+      "title": "Ephemeral OS Disk Hosts Fail Every Evening Scale-In",
+      "exams": [
+        "AZ-104",
+        "AZ-140"
+      ],
+      "difficulty": "advanced",
+      "facts": {
+        "hostPoolType": "Pooled, built from a session host configuration",
+        "osDisk": "Ephemeral OS disk on temp disk placement",
+        "scalingPlan": "Power management autoscale, off-peak minimum 0%",
+        "symptom": "Evening scale-in operations fail on every host; activity log shows deallocate errors",
+        "avdAssessRow": "dimensions.yaml#disk.ephemeral-os"
+      },
+      "prompt": "Pooled session hosts on ephemeral OS disks fail every time autoscale tries to scale in. What is the right fix?",
+      "choices": [
+        "Switch the hosts to Standard HDD OS disks",
+        "Use dynamic autoscale with Minimum percentage of active hosts at 100% so autoscale creates and deletes hosts instead of deallocating them",
+        "Enable Azure Backup on the OS disks",
+        "Raise the capacity threshold to 90%"
+      ],
+      "answerIndex": 1,
+      "explanation": "Ephemeral OS disks can't be deallocated. avd-assess's baseline (and Microsoft's ephemeral OS disk page) pairs them with autoscale that creates and deletes hosts, which dynamic autoscale does when the minimum active hosts percentage is 100%."
+    },
+    {
+      "id": "scen-hybrid-dns-resolver",
+      "title": "On-Premises Admins Resolve the Profile Share to a Public IP",
+      "exams": [
+        "AZ-104",
+        "AZ-140"
+      ],
+      "difficulty": "intermediate",
+      "facts": {
+        "connectivity": "Hub-spoke with site-to-site VPN to on-premises (10.100.0.0/22 spoke)",
+        "privateEndpoint": "Azure Files private endpoint in the spoke; privatelink.file.core.windows.net linked to hub and spoke",
+        "symptom": "Session hosts resolve the private IP; on-premises admin workstations resolve the public IP and are blocked by the storage firewall",
+        "onPremDns": "Windows DNS servers with no forwarder for Azure zones",
+        "avdAssessRow": "dimensions.yaml#network.dns",
+        "avdAssessMethod": "methods/network.md"
+      },
+      "prompt": "Session hosts reach the profile share privately, but on-premises admins get the public IP. What closes the gap?",
+      "choices": [
+        "Add the on-premises IP range to the storage account firewall",
+        "Deploy an Azure DNS Private Resolver inbound endpoint in the hub and add an on-premises conditional forwarder for privatelink.file.core.windows.net to it",
+        "Create a public DNS A record pointing at the private IP",
+        "Disable the private endpoint"
+      ],
+      "answerIndex": 1,
+      "explanation": "On-premises DNS can't query Azure Private DNS zones directly. A Private Resolver inbound endpoint gives it a private IP to forward the privatelink zone to, which avd-assess's network method requires wherever on-premises must resolve private names."
+    },
+    {
+      "id": "scen-ramp-down-disconnected",
+      "title": "Hosts Never Shut Down After Hours",
+      "exams": [
+        "AZ-140"
+      ],
+      "difficulty": "intermediate",
+      "facts": {
+        "hostPoolType": "Pooled, breadth-first",
+        "scalingPlan": "Ramp-down 17:00, force sign-out off; off-peak minimum 0%",
+        "ssoEnabled": "Yes (Entra single sign-on)",
+        "sessionsAtNight": "0 active, 9 disconnected across 4 hosts",
+        "disconnectedSessionTimeLimit": "Not configured",
+        "avdAssessRow": "dimensions.yaml#scaling.ramp-down"
+      },
+      "prompt": "Four hosts stay running all night even though nobody is working. What is the most likely cause and fix?",
+      "choices": [
+        "Start VM on Connect keeps them running; disable it",
+        "Disconnected sessions count as active, so hosts can't be freed; set a 15 to 30 minute disconnected-session time limit (or enable force sign-out with a notification in ramp-down)",
+        "The capacity threshold is too high; lower it to 10%",
+        "Breadth-first load balancing prevents shutdown; switch to personal pools"
+      ],
+      "answerIndex": 1,
+      "explanation": "Autoscale only stops a host with no sessions, and disconnected sessions count. With single sign-on a lock disconnects the session, so they pile up. avd-assess's ramp-down row recommends a 15 to 30 minute sign-out policy so the pool can reach zero."
     }
   ]
 }
