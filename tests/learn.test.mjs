@@ -92,3 +92,13 @@ test('static web UI and PWA files exist', () => {
   assert.ok(manifest.start_url, 'manifest.start_url is required');
   assert.equal(manifest.display, 'standalone');
 });
+
+test('dataset/index.json matches actual dataset counts', () => {
+  const data = loadDataset();
+  const index = JSON.parse(fs.readFileSync(path.join(ROOT, 'dataset/index.json'), 'utf8'));
+  assert.equal(index.schema, 'avd-learn-dataset/v1');
+  assert.equal(index.datasets.tracks.count, data.tracks.length);
+  assert.equal(index.datasets.concepts.count, data.concepts.length);
+  assert.equal(index.datasets.scenarios.count, data.scenarios.length);
+  assert.equal(index.datasets.labs.count, data.labs.length);
+});

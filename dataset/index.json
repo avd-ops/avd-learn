@@ -1,0 +1,28 @@
+{
+  "schema": "avd-learn-dataset/v1",
+  "repo": "avd-ops/avd-learn",
+  "exams": ["AZ-104", "AZ-140"],
+  "pinsFile": "pins.json",
+  "datasets": {
+    "tracks": {
+      "path": "dataset/tracks.json",
+      "schema": "avd-learn-tracks/v1",
+      "count": 6
+    },
+    "concepts": {
+      "path": "dataset/concepts.json",
+      "schema": "avd-learn-concepts/v1",
+      "count": 26
+    },
+    "scenarios": {
+      "path": "dataset/scenarios.json",
+      "schema": "avd-learn-scenarios/v1",
+      "count": 7
+    },
+    "labs": {
+      "path": "dataset/labs.json",
+      "schema": "avd-learn-labs/v1",
+      "count": 4
+    }
+  }
+}
