@@ -367,7 +367,87 @@ function renderDiagnose() {
   root.append(renderProgressBar(state.scenarioIndex, list.length), card);
 }
 
+function switchToTab(tabId) {
+  const target = document.getElementById(tabId);
+  if (!target) return;
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  const panels = [...document.querySelectorAll('[role="tabpanel"]')];
+  tabs.forEach((tab) => {
+    const selected = tab === target;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  });
+  panels.forEach((panel) => {
+    panel.hidden = panel.getAttribute('aria-labelledby') !== target.id;
+  });
+  target.focus();
+}
+
+function renderOverview() {
+  const root = document.getElementById('overview-content');
+  if (!root) return;
+  root.replaceChildren();
+
+  const modes = [
+    { tab: 'tab-study', label: 'Study', desc: 'Read one concept at a time with plain-English explanations, exam gotchas, and pinned references.' },
+    { tab: 'tab-flashcards', label: 'Flashcards', desc: 'Flip cards for active recall and track what you know vs. what to review.' },
+    { tab: 'tab-exam', label: 'Exam', desc: 'Practice AZ-104 and AZ-140 multiple-choice questions with instant explanations.' },
+    { tab: 'tab-labs', label: 'Labs', desc: 'Build and validate real setups using the avd-ops repos, plus spot gaps.' },
+    { tab: 'tab-diagnose', label: 'Diagnose', desc: 'Triage synthetic redacted C11 snapshots and architecture bottlenecks.' }
+  ];
+
+  const modeList = el(
+    'ul',
+    {},
+    modes.map((m) => {
+      const btn = el('button', { type: 'button', className: 'ref-pill', textContent: m.label });
+      btn.addEventListener('click', () => switchToTab(m.tab));
+      return el('li', { style: 'margin-block-end: 0.6rem;' }, [btn, document.createTextNode(` — ${m.desc}`)]);
+    })
+  );
+
+  const startBtn = el('button', { type: 'button', className: 'primary', textContent: 'Start Studying ->' });
+  startBtn.addEventListener('click', () => switchToTab('tab-study'));
+
+  const toolset = [
+    { name: 'avd-ops.dev', url: 'https://avd-ops.dev/', note: 'Front door & docs' },
+    { name: 'avd-assess', url: REPO_URLS['avd-assess'], note: 'Methodology & pinned standards' },
+    { name: 'avd-second-brain', url: REPO_URLS['avd-second-brain'], note: 'Rules, contracts & Desktop DevOps memory' },
+    { name: 'avd-current-state', url: REPO_URLS['avd-current-state'], note: 'Read-only C11 collector' },
+    { name: 'avd-migrate', url: REPO_URLS['avd-migrate'], note: 'C14 target-state designer' },
+    { name: 'avd-landing-zone', url: REPO_URLS['avd-landing-zone'], note: 'Bicep deployment orchestrator' },
+    { name: 'avd-linecheck', url: REPO_URLS['avd-linecheck'], note: 'Client network preflight' }
+  ];
+
+  const toolLinks = el(
+    'ul',
+    {},
+    toolset.map((t) => el('li', {}, [extLink(t.url, t.name), document.createTextNode(` — ${t.note}`)]))
+  );
+
+  root.append(
+    el('article', { className: 'card' }, [
+      el('h2', { textContent: 'Learn AVD from the ground up' }),
+      el(
+        'p',
+        {
+          textContent: `Study ${state.concepts.length} core concepts, ${state.scenarios.length} diagnostic scenarios, and ${state.labs.length} hands-on labs mapped to AZ-104 and AZ-140.`
+        }
+      ),
+      el('p', { className: 'meta', textContent: 'Use the Exam and Track filters at the top anytime to focus your session.' }),
+      modeList,
+      el('div', { className: 'actions' }, [startBtn])
+    ]),
+    el('article', { className: 'card' }, [
+      el('h2', { textContent: 'The avd-ops Toolset' }),
+      el('p', { textContent: 'Every concept and lab here links directly to the open-source avd-ops repositories:' }),
+      toolLinks
+    ])
+  );
+}
+
 function renderAll() {
+  renderOverview();
   renderStudy();
   renderFlashcards();
   renderExam();

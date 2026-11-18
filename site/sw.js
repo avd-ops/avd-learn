@@ -1,4 +1,4 @@
-const CACHE_NAME = 'avd-learn-v2';
+const CACHE_NAME = 'avd-learn-v3';
 const ASSETS = [
   './',
   './index.html',
