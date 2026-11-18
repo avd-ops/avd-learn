@@ -786,11 +786,11 @@
         "prompt": "A security review requires that session host temp disks and OS disk caches are encrypted at rest, without running BitLocker inside the guest. What should you enable?",
         "choices": [
           "Server-side encryption with platform-managed keys only",
-          "Encryption at host",
           "Azure Disk Encryption",
-          "A Private Endpoint on the managed disk"
+          "A Private Endpoint on the managed disk",
+          "Encryption at host"
         ],
-        "answerIndex": 1,
+        "answerIndex": 3,
         "explanation": "SSE already encrypts the managed disks but not the temp disk or host caches. Encryption at host encrypts those on the VM's host without anything running in the guest; Azure Disk Encryption is in-guest BitLocker and is being retired."
       }
     },
@@ -815,12 +815,12 @@
       "checkQuestion": {
         "prompt": "You want new session hosts to use Trusted launch, but your Azure Compute Gallery image definition was created as generation 1. What must change?",
         "choices": [
-          "Enable encryption at host on the subscription",
           "Use a generation 2 image definition and source image",
+          "Enable encryption at host on the subscription",
           "Switch the host pool to depth-first load balancing",
           "Assign the Desktop Virtualization Contributor role to the image builder"
         ],
-        "answerIndex": 1,
+        "answerIndex": 0,
         "explanation": "Trusted launch requires generation 2 VMs, and the gallery definition and source image must name the same generation, so you need a Gen2 image definition."
       }
     },
@@ -845,7 +845,7 @@
       "checkQuestion": {
         "prompt": "A photo of a confidential AVD desktop was taken with a phone and shared. Watermarking was enabled with default settings. How do you identify the session?",
         "choices": [
-          "Scan the QR code to read the connection ID, then look up that connection in the AVD diagnostics logs",
+          "Scan the QR code for the connection ID and look it up in AVD diagnostics",
           "Read the user's UPN printed in plain text across the screen",
           "Check the client's screenshot history in Intune",
           "Screen capture protection already blocked the photo, so nothing leaked"
@@ -865,7 +865,7 @@
       "gotchas": [
         "Inbound and outbound endpoints each need their own dedicated subnet, delegated to the resolver service.",
         "The private DNS zones still have to be linked to the VNet that holds the resolver; the resolver answers from the zones that VNet can see.",
-        "On-premises DNS needs a conditional forwarder for the privatelink zone pointing at the inbound endpoint IP, not at 168.63.129.16."
+        "On-premises DNS needs a conditional forwarder for the storage namespace (Microsoft's examples use file.core.windows.net or its privatelink zone) pointing at the inbound endpoint IP, not at 168.63.129.16."
       ],
       "pins": [
         "avd-assess:dimensions.yaml#network.dns",
@@ -876,11 +876,11 @@
         "prompt": "On-premises servers connected over ExpressRoute must resolve an FSLogix storage account's private endpoint. The privatelink zone is linked to the hub VNet. What do you configure?",
         "choices": [
           "A conditional forwarder on the on-premises DNS servers to 168.63.129.16",
-          "An Azure DNS Private Resolver inbound endpoint in the hub, with an on-premises conditional forwarder to its IP",
-          "A public DNS zone with an A record for the private endpoint IP",
-          "A DNS forwarding ruleset linked to the spoke VNet"
+          "A public DNS zone that holds an A record for the private endpoint's IP",
+          "A DNS forwarding ruleset linked to the spoke VNet",
+          "A DNS Private Resolver inbound endpoint in the hub as the forwarder target"
         ],
-        "answerIndex": 1,
+        "answerIndex": 3,
         "explanation": "168.63.129.16 is only reachable from inside Azure. The inbound endpoint gives on-premises DNS a reachable IP that answers from the private zones linked to the hub. A forwarding ruleset handles the opposite direction (Azure to on-premises)."
       }
     },
@@ -965,12 +965,12 @@
       "checkQuestion": {
         "prompt": "A new pooled AVD deployment uses FSLogix with no other profile solution and no special storage needs. What is the recommended container layout?",
         "choices": [
-          "A profile container and an ODFC container on separate shares",
           "A single profile container that includes Office data",
+          "A profile container and an ODFC container on separate shares",
           "An ODFC container only, with local profiles",
           "Roaming profiles with folder redirection"
         ],
-        "answerIndex": 1,
+        "answerIndex": 0,
         "explanation": "Microsoft recommends one profile container that includes Office data unless there's a stated reason to split out ODFC."
       }
     },
@@ -995,12 +995,12 @@
       "checkQuestion": {
         "prompt": "Users assigned to two pooled host pools that share one FSLogix profile share report a temporary profile when they open the second desktop. What is the best fix?",
         "choices": [
-          "Enable concurrent connections in FSLogix",
-          "Give each host pool its own profile store so a user's two sessions don't fight over one locked VHDX",
+          "Enable concurrent connections in FSLogix so both sessions mount the VHDX",
           "Increase the Azure Files quota",
+          "One profile store per host pool, so two sessions never share one VHDX",
           "Switch both pools to depth-first load balancing"
         ],
-        "answerIndex": 1,
+        "answerIndex": 2,
         "explanation": "The first session locks the user's VHDX. Concurrent connections aren't supported on AVD, so the fix is one profile store per host pool (or not assigning users to both)."
       }
     },
@@ -1024,12 +1024,12 @@
       "checkQuestion": {
         "prompt": "A company wants to give 200 contractors access to Windows 11 multi-session desktops in AVD. Which licensing approach is valid?",
         "choices": [
-          "Enroll the contractors in per-user access pricing",
-          "Give each contractor an eligible license, such as Microsoft 365 E3 or Windows Enterprise E3",
+          "Enroll the contractors in per-user access pricing on the subscription",
           "Buy one RDS CAL per session host",
-          "No license is needed because the company pays for the VMs"
+          "No license is needed because the company pays for the VMs",
+          "An eligible per-user license, such as Microsoft 365 E3 or Windows Enterprise E3"
         ],
-        "answerIndex": 1,
+        "answerIndex": 3,
         "explanation": "Contractors are internal users and need an eligible per-user license. Per-user access pricing is only for external commercial users, and RDS CALs cover Windows Server hosts, per user or device, not per host."
       }
     },
@@ -1084,12 +1084,12 @@
       "checkQuestion": {
         "prompt": "A personal host pool has Start VM on Connect enabled. Users report fast morning connections, but the bill shows every VM running 24 hours a day. What is missing?",
         "choices": [
+          "A scaling plan or automation that deallocates or hibernates VMs after use",
           "Depth-first load balancing",
-          "A scaling plan (or automation) that deallocates or hibernates VMs after users disconnect or sign out",
-          "The Desktop Virtualization User role",
+          "The Desktop Virtualization User role on the desktop application group",
           "Encryption at host"
         ],
-        "answerIndex": 1,
+        "answerIndex": 0,
         "explanation": "Start VM on Connect only starts VMs. Something else, such as a personal scaling plan, has to deallocate or hibernate them after use."
       }
     },
@@ -1104,7 +1104,7 @@
       "gotchas": [
         "During a flight, agent versions can differ between hosts in the same pool for a few days; that alone isn't a fault.",
         "The agent keeps a few previous versions so it can roll back from a failed update.",
-        "Validation pools receive agent updates first; keep one so a bad agent version shows up before production."
+        "A validation host pool takes service updates before production; keep one that mirrors production so a bad update shows up there first."
       ],
       "pins": [
         "avd-assess:dimensions.yaml#updates.agent",
@@ -1114,8 +1114,8 @@
       "checkQuestion": {
         "prompt": "A spare session host was left deallocated for four months. After you start it, it shows as Unavailable in the host pool. What is the most likely cause?",
         "choices": [
-          "Its FSLogix share is full",
-          "It missed the 90-day check-in and lost its registration with the AVD service",
+          "Its FSLogix profile share ran out of quota while it was off",
+          "It missed the 90-day check-in and lost its registration",
           "Breadth-first load balancing skips it",
           "Screen capture protection blocks it"
         ],

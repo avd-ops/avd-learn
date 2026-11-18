@@ -35,6 +35,12 @@ test('dataset integrity: tracks, concepts, scenarios, labs, and pins', () => {
   for (const s of data.scenarios) {
     assert.ok(s.choices.length >= 2, `Not enough choices on scenario ${s.id}`);
     assert.ok(s.answerIndex >= 0 && s.answerIndex < s.choices.length, `Invalid answerIndex on ${s.id}`);
+    if (s.pins !== undefined) {
+      assert.ok(Array.isArray(s.pins) && s.pins.length > 0, `pins must be a non-empty array on ${s.id}`);
+      for (const pin of s.pins) {
+        assert.match(pin, /^(avd-assess|avd-second-brain):\S+$/, `Invalid pin ${pin} on ${s.id}`);
+      }
+    }
   }
 });
 

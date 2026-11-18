@@ -6,7 +6,7 @@ Status: **design only.** Nothing here is built. `scripts/generate.py` is written
 
 ## 1. Goal
 
-A repeatable script, `scripts/generate.py`, that reads the pinned `avd-assess` and `avd-second-brain` commits in `pins.json` and **proposes** new entries for `dataset/concepts.json` and `dataset/scenarios.json`. A person reviews every proposal in a pull request. The script never edits the dataset on its own, never merges, and never runs on a schedule.
+A repeatable script, `scripts/generate.py`, that reads the pinned `avd-assess` and `avd-second-brain` commits in `pins.json` and **proposes** new entries for `dataset/concepts.json` and `dataset/scenarios.json`. A person reviews every proposal in a pull request. The script writes proposals to `output/` by default and touches `dataset/*.json` only when the operator runs `--apply` on a working branch (step 7). It never commits, pushes, merges or runs on a schedule.
 
 Non-goals:
 
@@ -16,7 +16,7 @@ Non-goals:
 
 ## 2. Inputs
 
-All inputs are fetched from `https://raw.githubusercontent.com/<repo>/<commit>/<path>` at the commits in `pins.json`. A fetch that returns anything but 200 stops the run.
+File contents are fetched from `https://raw.githubusercontent.com/<repo>/<commit>/<path>` at the commits in `pins.json`. A fetch that returns anything but 200 stops the run. Raw URLs can't list a folder, so the globs (`methods/*.md`, `references/*.yaml`, `knowledge/rules/*.json`) are expanded with one unauthenticated call per source to the GitHub git trees API at the pinned commit: two calls a run, well inside the unauthenticated limit, and no token needed.
 
 | Source | Pinned path | What the pipeline takes from it |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ Distilabel runs steps 4 and 6 as a `Pipeline` of tasks over a dataset of work it
 ### Step 1: fetch and verify
 
 - Read `pins.json`. For each source, fetch the files in section 2 at the pinned commit into `output/generate/<run-id>/source/` (git-ignored).
-- Record each file's git blob SHA (from the GitHub contents API at that commit) in `output/generate/<run-id>/manifest.json`. Every later step reads only from this snapshot.
+- Record each file's SHA-256 and its git blob SHA from the tree listing in `output/generate/<run-id>/manifest.json`. Every later step reads only from this snapshot.
 - Fail if `pins.json` has a source the script doesn't know, or is missing one it needs.
 
 ### Step 2: work items
@@ -127,7 +127,7 @@ Pure functions, tested offline with fixtures (criterion A3). A proposal that fai
 2. **Pin resolution.** Every pin names a file in the step 1 snapshot, and an anchor names a real row ID in `dimensions.yaml` or pillar ID in `pillars.yaml`.
 3. **Grounding.** Every sentence has a `support` entry; every cited claim ID resolved in step 2 and belongs to the work item. Every number, percentage, size, date, role name, registry path, setting name and API value in the card (a fixed set of regexes, plus Title Case runs of three or more words) must appear in a cited claim's `says` or the row's `says`, `decides` or `note`. Anything else fails as **ungrounded** (risk a).
 4. **Dedup.** Against every existing card and every earlier proposal in this run: same `id`; same pin set; or title, `plainEnglish` and check question each above the similarity thresholds in criterion A6 (stdlib `difflib` ratio on normalized text). Overlaps fail as **duplicate** (risk b).
-5. **Leak scan.** No UUID, email, IP outside `10.0.0.0/8`, domain outside `contoso.com` and Microsoft's documented service names, word from `tests/wording.json` `banned`, word from the family banned-project list, or a private repo name. Same scan on the PR body (risk e).
+5. **Leak scan.** No UUID, email, IP outside `10.0.0.0/8` (except Microsoft's documented platform addresses in `scripts/public-ips.txt`, such as `168.63.129.16`, each with a comment and a Learn link), domain outside `contoso.com` and Microsoft's documented service names, word from `tests/wording.json` `banned`, word from the family banned-project list, or a private repo name. Same scan on the PR body (risk e).
 6. **Distractor lint.** Exactly four choices; no two choices with similarity over 0.8; the correct answer isn't the longest choice by more than 40 percent; no "all of the above" or "none of the above"; every distractor has a `whyWrong` with support (risk c).
 
 ### Step 6: LLM judge
@@ -234,14 +234,14 @@ Each criterion is a check that passes before `scripts/generate.py` is written. A
 
 | ID | Criterion | Check |
 | --- | --- | --- |
-| A1 | Every input path in section 2 exists at the commits in `pins.json`. | `scripts/pin_index.py --check` fetches the tree at each pin and lists the files; exit 0. |
+| A1 | Every input path in section 2 exists at the commits in `pins.json`. | `scripts/pin_index.py --check` lists each pinned tree (one git trees API call per source) and fetches the files over raw URLs; exit 0. |
 | A2 | `scripts/schema/proposal.schema.json` exists, and valid and invalid fixtures in `tests/fixtures/generate/` pass and fail as expected. | Unit test. |
 | A3 | Each gate in step 5 is a pure function with at least one passing and one failing fixture per rule, including: an invented registry value (ungrounded), a reworded copy of `avd-scaling-finops` (duplicate), a choice set with a long correct answer (distractor lint), a GUID and a banned product name (leak). | `python3 -m unittest discover -s scripts` runs offline and passes. |
 | A4 | Track and domain values are restricted to those in `dataset/tracks.json` and the domain strings already used in `dataset/concepts.json`. | Unit test on the schema step. |
 | A5 | Grounding rule is defined for claim kinds: a `guidance` or `prior` claim can't support "must", "always" or "required". | Fixture in A3. |
 | A6 | Dedup thresholds are tuned so that, run over today's 39 concepts and 10 scenarios against each other, the gate flags no false duplicates, and flags each of five hand-made near-copies. | Unit test with the five near-copies as fixtures. |
 | A7 | `dataset/pin-index.json` and `tests/pins.test.mjs` exist; every current pin resolves, or the test lists the ones that don't. The 11 older cards that pin a landing zone parameter instead of a row ID are either re-pinned to the row or the index maps parameter to row. | `node --test tests/` passes. |
-| A8 | The leak test in `tests/learn.test.mjs` also checks the banned words from avd-assess `tests/wording.json` at the pin and the family's banned project names. | `node --test tests/learn.test.mjs` passes, and fails on a fixture with a banned word. |
+| A8 | The leak test in `tests/learn.test.mjs` also checks the banned words from avd-assess `tests/wording.json` at the pin, the family's banned project names, and IPs outside `10.0.0.0/8` minus the `scripts/public-ips.txt` allowlist (today's cards name `168.63.129.16`, Azure's platform DNS address, which is exam content, not estate data). | `node --test tests/learn.test.mjs` passes, and fails on a fixture with a banned word or an unlisted public IP. |
 | A9 | The judge rubric and its pass thresholds (section 3, step 6) are fixed in `scripts/generate.toml`, and a dry run with a stub model shows a failing score drops a proposal. | Unit test with a stub LLM. |
 | A10 | The Distilabel version is pinned, and the step classes and structured-output option used in the design exist in that version. | A short import test against the pinned version. |
 | A11 | Cost guard: the script prints the call count and token estimate, stops without `--yes`, and stops at `--max-calls`. | Unit test with a stub model. |
