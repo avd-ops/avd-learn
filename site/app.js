@@ -351,7 +351,8 @@ function renderDiagnose() {
           className: ok ? 'feedback-ok' : 'feedback-warn',
           textContent: ok ? 'Correct diagnosis!' : `Incorrect — Answer: ${s.answerIndex + 1}. ${s.choices[s.answerIndex]}`
         }),
-        el('p', { textContent: s.explanation })
+        el('p', { textContent: s.explanation }),
+        ...(s.pins ? [renderPins(s.pins)] : [])
       );
     });
     card.append(btn);

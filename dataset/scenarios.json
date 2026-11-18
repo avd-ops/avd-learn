@@ -146,6 +146,88 @@
       ],
       "answerIndex": 1,
       "explanation": "Workstation power/sleep policies should never apply to AVD session hosts. Intune Assignment Filters cleanly separate multi-session AVD hosts from physical laptops."
+    },
+    {
+      "id": "scen-rampdown-disconnected",
+      "title": "Pool Never Scales to Zero After Hours",
+      "exams": ["AZ-140"],
+      "difficulty": "intermediate",
+      "facts": {
+        "poolType": "Pooled (Windows 11 Multi-session), single sign-on enabled",
+        "scalingPlan": "Ramp-down 18:00, capacity threshold 90%, force sign-out off, stop hosts with no active sessions",
+        "offPeakMinimumHosts": "0%",
+        "maxSessionLimit": 8,
+        "at22h00": "0 active sessions, 14 disconnected sessions, 2 hosts running",
+        "hostPolicy": "No time limit set for disconnected sessions",
+        "avdAssessDimension": "scaling.ramp-down"
+      },
+      "prompt": "Every night two hosts stay running until morning even though nobody is working. What explains it, and what is the fix that keeps force sign-out off?",
+      "choices": [
+        "The scaling plan isn't assigned to the host pool; assign it",
+        "Disconnected sessions count as active for consolidation; set a 15 to 30 minute time limit for disconnected sessions on the hosts",
+        "Breadth-first load balancing prevents deallocation; switch off-peak to depth-first",
+        "Start VM on Connect keeps hosts on; turn it off"
+      ],
+      "answerIndex": 1,
+      "explanation": "Autoscale assumes disconnected users can reconnect: CEILING(14 / (8 x 0.9)) = 2 hosts. With single sign-on, a lock also disconnects. A disconnected-session time limit signs those users out so the pool can reach zero.",
+      "pins": [
+        "avd-assess:dimensions.yaml#scaling.ramp-down",
+        "avd-assess:pillars.yaml#scaling"
+      ]
+    },
+    {
+      "id": "scen-onprem-dns-private-endpoint",
+      "title": "Admins On-Premises Can't Reach the Profile Share's Private Endpoint",
+      "exams": ["AZ-104", "AZ-140"],
+      "difficulty": "advanced",
+      "facts": {
+        "topology": "Hub-spoke, ExpressRoute to on-premises, profile storage public network access disabled",
+        "privateDnsZone": "privatelink.file.core.windows.net, linked to the hub VNet",
+        "sessionHostLookup": "Resolves storage name to 10.100.2.4 (private endpoint)",
+        "onPremLookup": "Resolves storage name to a public address; SMB times out",
+        "onPremDnsForwarder": "Conditional forwarder for file.core.windows.net -> 168.63.129.16",
+        "avdAssessDimension": "network.dns"
+      },
+      "prompt": "Session hosts mount the FSLogix share fine, but admins on-premises can't open it to fix a corrupt profile. What is the root cause and fix?",
+      "choices": [
+        "The private endpoint is in the wrong subnet; move it to the session host subnet",
+        "On-premises DNS can't reach 168.63.129.16; deploy an Azure DNS Private Resolver inbound endpoint in the hub and point the on-premises conditional forwarder at its IP",
+        "Enable public network access on the storage account",
+        "Link the private DNS zone to the on-premises network"
+      ],
+      "answerIndex": 1,
+      "explanation": "168.63.129.16 only answers from inside Azure, so the on-premises forwarder fails and falls back to public resolution. An inbound endpoint gives on-premises DNS a private IP that answers from the zones linked to the hub.",
+      "pins": [
+        "avd-assess:dimensions.yaml#network.dns",
+        "avd-assess:methods/network.md"
+      ]
+    },
+    {
+      "id": "scen-ephemeral-autoscale",
+      "title": "Ephemeral OS Disk Pool Fails Its Nightly Scale-Down",
+      "exams": ["AZ-104", "AZ-140"],
+      "difficulty": "advanced",
+      "facts": {
+        "poolType": "Pooled, session host configuration, ephemeral OS disk on temp disk",
+        "scalingMethod": "Power management autoscaling (start and deallocate)",
+        "offPeakMinimumHosts": "20%",
+        "activityLog": "Deallocate operations on session hosts fail every night at ramp-down",
+        "profiles": "FSLogix on Azure Files Premium",
+        "avdAssessDimension": "disk.ephemeral-os"
+      },
+      "prompt": "After moving a pooled host pool to ephemeral OS disks, the nightly ramp-down errors and hosts stay on. What change fits the design?",
+      "choices": [
+        "Switch the OS disk back to Premium SSD so hosts can hibernate",
+        "Use dynamic autoscaling with the minimum percentage of active hosts at 100% in every phase, so autoscale creates and deletes hosts instead of starting and deallocating them",
+        "Raise the ramp-down capacity threshold to 100%",
+        "Enable Azure Backup on the session hosts before deallocation"
+      ],
+      "answerIndex": 1,
+      "explanation": "Hosts on ephemeral OS disks can't be deallocated. Microsoft's guidance is dynamic autoscaling with 100% minimum active hosts, so scaling only creates and deletes hosts. Azure Backup isn't supported on ephemeral OS disks.",
+      "pins": [
+        "avd-assess:dimensions.yaml#disk.ephemeral-os",
+        "avd-assess:dimensions.yaml#scaling.plan"
+      ]
     }
   ]
 }

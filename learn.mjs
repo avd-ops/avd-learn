@@ -194,6 +194,7 @@ async function cmdDiagnose(data, scenarioId) {
       const pick = Number.parseInt(raw, 10) - 1;
       console.log(pick === s.answerIndex ? 'CORRECT!' : `INCORRECT. Answer: ${s.answerIndex + 1}. ${s.choices[s.answerIndex]}`);
       console.log(`Why: ${s.explanation}`);
+      if (s.pins) console.log(`Refs: ${s.pins.join(', ')}`);
     }
   } finally {
     rl.close();

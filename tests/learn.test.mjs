@@ -46,7 +46,7 @@ test('filterBySelector filters by exam and track', () => {
 
   assert.ok(az104.length >= 5);
   assert.ok(az140.length >= 15);
-  assert.equal(core.length, 7);
+  assert.equal(core.length, 9);
 });
 
 test('no tenant UUIDs or emails leaked in dataset', () => {

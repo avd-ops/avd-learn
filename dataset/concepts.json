@@ -733,6 +733,395 @@
         "answerIndex": 0,
         "explanation": "RBAC governs user/principal permissions (who), while Azure Policy governs resource configuration compliance (what)."
       }
+    },
+    {
+      "id": "avd-ephemeral-os-disks",
+      "track": "avd-images-scaling",
+      "title": "Ephemeral OS Disks for Stateless Pooled Hosts",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-140: Plan and implement an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "An ephemeral OS disk puts the operating system on the VM's local temp disk or cache instead of a remote managed disk. Reads and writes are fast, reimaging is quick, and there is no OS disk storage to pay for, but nothing on the OS disk survives a reimage or redeploy.",
+      "whyItMatters": "For AVD, ephemeral OS disks fit only pooled, stateless host pools built from a session host configuration, where profiles live in FSLogix and apps come from the image or App Attach. The VM size's temp disk or cache must be at least as large as the image's OS disk.",
+      "gotchas": [
+        "A VM with an ephemeral OS disk can't be stopped (deallocated); it can only be restarted, reimaged or deleted. Autoscale must create and delete hosts instead of starting and deallocating them.",
+        "Not supported with ephemeral OS disks: image capture, disk snapshots, Azure Disk Encryption, Azure Backup, Azure Site Recovery and OS disk swap.",
+        "Microsoft's AVD prerequisites page still lists ephemeral OS disks as unsupported while the dedicated AVD page supports them for pooled pools with a session host configuration; avd-assess records the disagreement and reads the dedicated page as newer."
+      ],
+      "pins": [
+        "avd-assess:dimensions.yaml#disk.ephemeral-os",
+        "avd-assess:dimensions.yaml#disk.os-disk-type",
+        "avd-assess:pillars.yaml#capacity"
+      ],
+      "checkQuestion": {
+        "prompt": "A pooled host pool runs session hosts on ephemeral OS disks. Which operation is NOT supported on those session hosts?",
+        "choices": [
+          "Restart the VM",
+          "Reimage the VM",
+          "Stop (deallocate) the VM",
+          "Delete the VM"
+        ],
+        "answerIndex": 2,
+        "explanation": "Ephemeral OS disks live on the VM's local storage, which is released on deallocation, so stop (deallocate) isn't supported. Restart, reimage and delete are."
+      }
+    },
+    {
+      "id": "az104-disk-encryption",
+      "track": "az104-core",
+      "title": "Managed Disk Encryption: SSE, Encryption at Host, ADE & CMK",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-104: Deploy and manage Azure compute resources",
+      "plainEnglish": "Every managed disk is encrypted at rest by server-side encryption (SSE) with platform-managed keys, always on. Encryption at host extends that encryption to the temp disk and the OS and data disk caches on the VM's physical host. Customer-managed keys (CMK) swap the platform key for your own key in Key Vault, wired in through a disk encryption set.",
+      "whyItMatters": "Session hosts write page files, caches and temp data to the temp disk and host caches. SSE alone doesn't cover those, so avd-assess's baseline is encryption at host for new session hosts, with CMK only when a stated requirement asks for it.",
+      "gotchas": [
+        "Azure Disk Encryption (BitLocker inside the guest) is being retired (avd-assess records 2028-09-15); don't design new session hosts around it.",
+        "Encryption at host is a subscription feature that must be registered (Microsoft.Compute/EncryptionAtHost) before VMs can turn it on.",
+        "CMK adds a Key Vault dependency: if the key is disabled or the disk encryption set loses access, the VMs using it can't start."
+      ],
+      "pins": [
+        "avd-assess:dimensions.yaml#encryption.disks",
+        "avd-assess:dimensions.yaml#encryption.keys",
+        "avd-assess:pillars.yaml#security-posture"
+      ],
+      "checkQuestion": {
+        "prompt": "A security review requires that session host temp disks and OS disk caches are encrypted at rest, without running BitLocker inside the guest. What should you enable?",
+        "choices": [
+          "Server-side encryption with platform-managed keys only",
+          "Encryption at host",
+          "Azure Disk Encryption",
+          "A Private Endpoint on the managed disk"
+        ],
+        "answerIndex": 1,
+        "explanation": "SSE already encrypts the managed disks but not the temp disk or host caches. Encryption at host encrypts those on the VM's host without anything running in the guest; Azure Disk Encryption is in-guest BitLocker and is being retired."
+      }
+    },
+    {
+      "id": "avd-trusted-launch-gen2",
+      "track": "avd-images-scaling",
+      "title": "Trusted Launch, Gen2 Images & Confidential VMs",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-140: Create and configure session host images",
+      "plainEnglish": "Trusted launch adds Secure Boot, a virtual TPM (vTPM) and boot integrity monitoring to a VM. It needs a generation 2 VM and image, and it's the default security type for new session hosts. Confidential VMs go further and encrypt VM memory against the host.",
+      "whyItMatters": "Your golden image pipeline decides whether Trusted launch is even possible: the Azure Compute Gallery image definition and the source image must both be generation 2.",
+      "gotchas": [
+        "A gallery image definition records one Hyper-V generation; a Gen1 definition can't feed Trusted launch hosts. Build a Gen2 definition for the image.",
+        "A generation 1 host can be upgraded to Gen2 with Trusted launch, but it's a planned change, not a toggle on a running host.",
+        "Trusted launch is checked from the control plane with Reader rights; what runs inside the guest (app control, local admins) is not."
+      ],
+      "pins": [
+        "avd-assess:dimensions.yaml#security.host-type",
+        "avd-assess:dimensions.yaml#image.vm-generation",
+        "avd-assess:methods/security.md"
+      ],
+      "checkQuestion": {
+        "prompt": "You want new session hosts to use Trusted launch, but your Azure Compute Gallery image definition was created as generation 1. What must change?",
+        "choices": [
+          "Enable encryption at host on the subscription",
+          "Use a generation 2 image definition and source image",
+          "Switch the host pool to depth-first load balancing",
+          "Assign the Desktop Virtualization Contributor role to the image builder"
+        ],
+        "answerIndex": 1,
+        "explanation": "Trusted launch requires generation 2 VMs, and the gallery definition and source image must name the same generation, so you need a Gen2 image definition."
+      }
+    },
+    {
+      "id": "avd-screen-capture-watermarking",
+      "track": "avd-identity-network",
+      "title": "Screen Capture Protection & Watermarking",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Manage access and security",
+      "plainEnglish": "Screen capture protection blocks remote content from screenshots and screen sharing on the client. Watermarking overlays faint QR codes on the remote desktop that hold the session's connection ID (or, for personal Entra-joined hosts, the device ID), so a photo of the screen can be traced back to a session. Both are set on the session hosts through Intune's settings catalog or the AVD Group Policy administrative template.",
+      "whyItMatters": "These are the data-leak controls for sensitive desktops. They run inside the host, so a control-plane read can't see them; avd-assess leaves them unknown until something reads the host.",
+      "gotchas": [
+        "Once either is on, only clients that support it can connect; an unsupported client fails with a nonspecific error. Mobile and web clients need Intune app protection (MAM) plus a Conditional Access policy.",
+        "Watermarking applies to full desktops only, not RemoteApp, and not to direct mstsc connections that bypass AVD.",
+        "Screen capture protection isn't DRM: it can't stop a phone camera, which is why it pairs with watermarking and with turning off clipboard, drive and printer redirection."
+      ],
+      "pins": [
+        "avd-assess:pillars.yaml#security-posture",
+        "avd-assess:methods/security.md",
+        "avd-assess:dimensions.yaml#security.redirection"
+      ],
+      "checkQuestion": {
+        "prompt": "A photo of a confidential AVD desktop was taken with a phone and shared. Watermarking was enabled with default settings. How do you identify the session?",
+        "choices": [
+          "Scan the QR code to read the connection ID, then look up that connection in the AVD diagnostics logs",
+          "Read the user's UPN printed in plain text across the screen",
+          "Check the client's screenshot history in Intune",
+          "Screen capture protection already blocked the photo, so nothing leaked"
+        ],
+        "answerIndex": 0,
+        "explanation": "By default the watermark QR code holds the session's connection ID, which admins match to a connection in the AVD diagnostics (Log Analytics) to find the user and host. Screen capture protection can't stop an external camera."
+      }
+    },
+    {
+      "id": "az104-dns-private-resolver",
+      "track": "az104-core",
+      "title": "Azure DNS Private Resolver for Hybrid Name Resolution",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-104: Configure and manage virtual networking",
+      "plainEnglish": "Azure DNS Private Resolver is a managed DNS service inside a VNet. Its inbound endpoint gives on-premises DNS servers a private IP to forward queries to, so they can resolve Azure private DNS zones. Its outbound endpoint plus a DNS forwarding ruleset lets Azure workloads resolve on-premises domains, without running DNS forwarder VMs.",
+      "whyItMatters": "Session hosts resolve private endpoints through linked private DNS zones, but admins and clients on-premises can't reach Azure's 168.63.129.16 resolver. Without a resolver or forwarder, `privatelink.file.core.windows.net` names resolve to public addresses from on-premises.",
+      "gotchas": [
+        "Inbound and outbound endpoints each need their own dedicated subnet, delegated to the resolver service.",
+        "The private DNS zones still have to be linked to the VNet that holds the resolver; the resolver answers from the zones that VNet can see.",
+        "On-premises DNS needs a conditional forwarder for the privatelink zone pointing at the inbound endpoint IP, not at 168.63.129.16."
+      ],
+      "pins": [
+        "avd-assess:dimensions.yaml#network.dns",
+        "avd-assess:methods/network.md",
+        "avd-assess:pillars.yaml#networking-azure"
+      ],
+      "checkQuestion": {
+        "prompt": "On-premises servers connected over ExpressRoute must resolve an FSLogix storage account's private endpoint. The privatelink zone is linked to the hub VNet. What do you configure?",
+        "choices": [
+          "A conditional forwarder on the on-premises DNS servers to 168.63.129.16",
+          "An Azure DNS Private Resolver inbound endpoint in the hub, with an on-premises conditional forwarder to its IP",
+          "A public DNS zone with an A record for the private endpoint IP",
+          "A DNS forwarding ruleset linked to the spoke VNet"
+        ],
+        "answerIndex": 1,
+        "explanation": "168.63.129.16 is only reachable from inside Azure. The inbound endpoint gives on-premises DNS a reachable IP that answers from the private zones linked to the hub. A forwarding ruleset handles the opposite direction (Azure to on-premises)."
+      }
+    },
+    {
+      "id": "avd-scaling-plan-ramp-up",
+      "track": "avd-images-scaling",
+      "title": "Scaling Plan Ramp-Up: Minimum Hosts & Capacity Threshold",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Plan and implement an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "A pooled scaling plan schedule has four phases: ramp-up, peak, ramp-down and off-peak. Ramp-up sets a start time, a minimum percentage of hosts to have running, and a capacity threshold: the share of available session slots in use that triggers starting another host. Peak inherits the ramp-up threshold; off-peak inherits the ramp-down threshold.",
+      "whyItMatters": "Microsoft says to start ramp-up before users arrive but publishes no lead time or threshold. avd-assess treats both as measured values: when sessions actually arrive and how full the pool runs.",
+      "gotchas": [
+        "Available capacity counts only running, available hosts: hosts on x max session limit. A 60% threshold on 100 slots starts another host above 60 sessions.",
+        "Breadth-first is the usual ramp-up and peak choice (performance); depth-first suits off-peak (fewer hosts on). The scaling plan's choice overrides the host pool's setting during each phase.",
+        "Autoscale needs the Desktop Virtualization Power On Off Contributor role for the AVD service principal at the host pool, resource group or subscription scope."
+      ],
+      "pins": [
+        "avd-assess:dimensions.yaml#scaling.schedule",
+        "avd-assess:pillars.yaml#scaling",
+        "avd-assess:dimensions.yaml#density.load-balancing"
+      ],
+      "checkQuestion": {
+        "prompt": "During ramp-up, 5 session hosts are running with a max session limit of 10 and a capacity threshold of 60%. At what point does autoscale start another host?",
+        "choices": [
+          "When any single host reaches 10 sessions",
+          "When more than 30 sessions are in use",
+          "When more than 60 sessions are in use",
+          "Only when the peak phase begins"
+        ],
+        "answerIndex": 1,
+        "explanation": "Available capacity is 5 hosts x 10 sessions = 50 slots. 60% of 50 is 30, so autoscale starts another host once used capacity goes above 30 sessions."
+      }
+    },
+    {
+      "id": "avd-scaling-ramp-down-disconnected",
+      "track": "avd-images-scaling",
+      "title": "Scaling Plan Ramp-Down, Force Sign-Out & Disconnected Sessions",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Plan and implement an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "Ramp-down only turns hosts off when every session, connected or disconnected, can be consolidated onto fewer hosts without crossing the capacity threshold. You either let autoscale force sign-out after a warning and wait time, or stop hosts only when they have no active (or no active and disconnected) sessions.",
+      "whyItMatters": "Disconnected sessions count as active, so a pool full of forgotten disconnected sessions never reaches zero hosts at night. A disconnected-session time limit on the hosts (15 to 30 minutes) is what lets it drain.",
+      "gotchas": [
+        "Required hosts = CEILING(total sessions / (max session limit x capacity threshold)); the minimum percentage of hosts wins if it gives a higher number.",
+        "With single sign-on, locking the session disconnects it, so locked users count as disconnected sessions.",
+        "Force sign-out applies only in the ramp-down phase, after the wait time; it picks the hosts with the fewest sessions, drains them and notifies users first."
+      ],
+      "pins": [
+        "avd-assess:dimensions.yaml#scaling.ramp-down",
+        "avd-assess:pillars.yaml#scaling",
+        "avd-assess:methods/finops.md"
+      ],
+      "checkQuestion": {
+        "prompt": "In off-peak, a pool has 9 disconnected sessions, a max session limit of 5, a capacity threshold of 90%, and a minimum percentage of hosts of 0%. How many hosts does autoscale keep running?",
+        "choices": [
+          "0, because no sessions are active",
+          "1",
+          "2",
+          "9"
+        ],
+        "answerIndex": 2,
+        "explanation": "Disconnected sessions count. CEILING(9 / (5 x 0.9)) = CEILING(2) = 2 hosts stay on for possible reconnections. A disconnected-session time limit would let them sign out and the pool drain."
+      }
+    },
+    {
+      "id": "avd-fslogix-odfc-vs-profile",
+      "track": "avd-profiles-apps",
+      "title": "FSLogix Profile Container vs. ODFC Container",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Implement and manage user environments and apps",
+      "plainEnglish": "The FSLogix profile container holds the whole user profile, Office data included. The Office Data File Containers (ODFC) container holds only Microsoft 365 app data, such as the Outlook cache, Teams data and the search index. Turning ODFC on beside the profile container moves that Office data out of the profile into its own VHDX.",
+      "whyItMatters": "Microsoft's default is one profile container holding everything. Split ODFC only for a stated reason, such as a different profile solution that keeps the profile, or putting re-downloadable Office cache on different storage.",
+      "gotchas": [
+        "Profile container settings live under HKLM\\SOFTWARE\\FSLogix\\Profiles; ODFC settings live under HKLM\\SOFTWARE\\Policies\\FSLogix\\ODFC. Each has its own Enabled and VHDLocations.",
+        "A split Office container usually holds cached Microsoft 365 data that can be downloaded again, so it isn't backed up or replicated like the profile. Decide what in each container has to survive.",
+        "Two containers mean two VHDX mounts per sign-in and two sets of storage to size."
+      ],
+      "pins": [
+        "avd-assess:dimensions.yaml#profile.container-layout",
+        "avd-assess:dimensions.yaml#reliability.profile-data",
+        "avd-assess:pillars.yaml#profiles"
+      ],
+      "checkQuestion": {
+        "prompt": "A new pooled AVD deployment uses FSLogix with no other profile solution and no special storage needs. What is the recommended container layout?",
+        "choices": [
+          "A profile container and an ODFC container on separate shares",
+          "A single profile container that includes Office data",
+          "An ODFC container only, with local profiles",
+          "Roaming profiles with folder redirection"
+        ],
+        "answerIndex": 1,
+        "explanation": "Microsoft recommends one profile container that includes Office data unless there's a stated reason to split out ODFC."
+      }
+    },
+    {
+      "id": "avd-fslogix-concurrent-connections",
+      "track": "avd-profiles-apps",
+      "title": "FSLogix Concurrent Connections & One Profile Store per Pool",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Implement and manage user environments and apps",
+      "plainEnglish": "A profile container VHDX is locked by the session that mounts it. The supported AVD setting is a single connection (ProfileType 0), so one user should have one session against one container at a time. Concurrent connections aren't supported on AVD hosts, and multiple connections need read-only differencing disks.",
+      "whyItMatters": "If the same user signs in to two host pools that point at the same profile share, the second session can't mount the locked container and the user gets a temporary profile or a failed sign-in. avd-assess's baseline is one profile store per host pool, in that pool's region.",
+      "gotchas": [
+        "Keep the host setting that restricts each user to a single session on pooled hosts.",
+        "OneDrive supports neither concurrent nor multiple connections.",
+        "Separate profile shares per host pool also keep different images and app sets from corrupting each other's profile state."
+      ],
+      "pins": [
+        "avd-assess:dimensions.yaml#profile.concurrent-connections",
+        "avd-assess:dimensions.yaml#profile.share-per-pool",
+        "avd-assess:pillars.yaml#profiles"
+      ],
+      "checkQuestion": {
+        "prompt": "Users assigned to two pooled host pools that share one FSLogix profile share report a temporary profile when they open the second desktop. What is the best fix?",
+        "choices": [
+          "Enable concurrent connections in FSLogix",
+          "Give each host pool its own profile store so a user's two sessions don't fight over one locked VHDX",
+          "Increase the Azure Files quota",
+          "Switch both pools to depth-first load balancing"
+        ],
+        "answerIndex": 1,
+        "explanation": "The first session locks the user's VHDX. Concurrent connections aren't supported on AVD, so the fix is one profile store per host pool (or not assigning users to both)."
+      }
+    },
+    {
+      "id": "avd-licensing-entitlement",
+      "track": "avd-architecture",
+      "title": "AVD User Licensing & Per-User Access Pricing",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Plan and implement an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "AVD has no separate license for internal users; their right to use it comes from an eligible license. For Windows client OS (Windows 11/10 Enterprise and multi-session) that's Microsoft 365 E3/E5/A3/A5/F3/Business Premium, Windows Enterprise E3/E5, Windows Education A3/A5 or Windows VDA per user. For Windows Server session hosts it's an RDS CAL with Software Assurance (or an RDS user subscription).",
+      "whyItMatters": "Per-user access pricing is a monthly Azure charge for external commercial users (customers of a SaaS app) only. Contractors and other internal users still need an eligible license, and Microsoft wants per-user access pricing in its own subscription, apart from licensed users.",
+      "gotchas": [
+        "Compute, storage and networking bill on the Azure subscription no matter how users are licensed.",
+        "Per-user access pricing isn't a way to license employees or contractors.",
+        "Licensing is checked per user, not per host or per concurrent session."
+      ],
+      "pins": [
+        "avd-assess:dimensions.yaml#cost.licensing",
+        "avd-assess:pillars.yaml#finops"
+      ],
+      "checkQuestion": {
+        "prompt": "A company wants to give 200 contractors access to Windows 11 multi-session desktops in AVD. Which licensing approach is valid?",
+        "choices": [
+          "Enroll the contractors in per-user access pricing",
+          "Give each contractor an eligible license, such as Microsoft 365 E3 or Windows Enterprise E3",
+          "Buy one RDS CAL per session host",
+          "No license is needed because the company pays for the VMs"
+        ],
+        "answerIndex": 1,
+        "explanation": "Contractors are internal users and need an eligible per-user license. Per-user access pricing is only for external commercial users, and RDS CALs cover Windows Server hosts, per user or device, not per host."
+      }
+    },
+    {
+      "id": "entra-licensing-conditional-access",
+      "track": "avd-identity-network",
+      "title": "Entra ID P1 vs. P2 for AVD Conditional Access",
+      "exams": ["AZ-104", "AZ-140"],
+      "domain": "AZ-104: Manage Azure identities and governance",
+      "plainEnglish": "Conditional Access needs Microsoft Entra ID P1, which Microsoft 365 E3/E5, Business Premium and EMS include. Risk-based policies (sign-in risk and user risk from ID Protection) and Privileged Identity Management need P2.",
+      "whyItMatters": "AVD's MFA design is two aligned Conditional Access policies: one for the Azure Virtual Desktop app and one for Windows Cloud Login when single sign-on is on. Legacy per-user MFA stays off, and policies that target all apps get checked for conflicts.",
+      "gotchas": [
+        "Free Entra ID only offers security defaults, which can't target AVD alone or exclude anything.",
+        "With Entra Kerberos for the FSLogix share, the storage account's app must be excluded from MFA Conditional Access, or profile mounts fail.",
+        "Every user a policy applies to needs the license, not just the admins who write the policy."
+      ],
+      "pins": [
+        "avd-assess:dimensions.yaml#identity.mfa-conditional-access",
+        "avd-assess:dimensions.yaml#identity.files-auth",
+        "avd-assess:pillars.yaml#identity"
+      ],
+      "checkQuestion": {
+        "prompt": "You must block AVD sign-ins when Entra ID Protection rates the sign-in risk as high. What is the minimum Entra license for the affected users?",
+        "choices": [
+          "Microsoft Entra ID Free",
+          "Microsoft Entra ID P1",
+          "Microsoft Entra ID P2",
+          "Windows Enterprise E3"
+        ],
+        "answerIndex": 2,
+        "explanation": "Conditional Access itself needs P1, but sign-in risk and user risk conditions come from ID Protection, which needs P2."
+      }
+    },
+    {
+      "id": "avd-personal-pool-power",
+      "track": "avd-images-scaling",
+      "title": "Personal Host Pool Power: Start VM on Connect, Deallocation & Hibernation",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Plan and implement an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "Start VM on Connect powers on a deallocated host when a user connects, but it never turns one off. Personal host pools need a personal scaling plan (or other automation) to deallocate or hibernate a user's VM after they disconnect or sign out.",
+      "whyItMatters": "Without a turn-off rule, every personal desktop that's ever been used keeps billing compute around the clock. Hibernation keeps the user's open apps but isn't supported with FSLogix profiles or App Attach.",
+      "gotchas": [
+        "The AVD service principal needs Desktop Virtualization Power On Contributor for Start VM on Connect, and Power On Off Contributor for autoscale to stop VMs too.",
+        "A personal scaling plan acts on disconnect or sign-out after a set number of minutes; deallocate or hibernate are the choices.",
+        "A deallocated VM still bills for its managed disks."
+      ],
+      "pins": [
+        "avd-assess:dimensions.yaml#scaling.personal",
+        "avd-assess:dimensions.yaml#cost.power",
+        "avd-assess:pillars.yaml#scaling"
+      ],
+      "checkQuestion": {
+        "prompt": "A personal host pool has Start VM on Connect enabled. Users report fast morning connections, but the bill shows every VM running 24 hours a day. What is missing?",
+        "choices": [
+          "Depth-first load balancing",
+          "A scaling plan (or automation) that deallocates or hibernates VMs after users disconnect or sign out",
+          "The Desktop Virtualization User role",
+          "Encryption at host"
+        ],
+        "answerIndex": 1,
+        "explanation": "Start VM on Connect only starts VMs. Something else, such as a personal scaling plan, has to deallocate or hibernate them after use."
+      }
+    },
+    {
+      "id": "avd-agent-updates-registration",
+      "track": "avd-ops-troubleshooting",
+      "title": "AVD Agent Updates & Keeping Idle Hosts Registered",
+      "exams": ["AZ-140"],
+      "domain": "AZ-140: Monitor and maintain an Azure Virtual Desktop infrastructure",
+      "plainEnglish": "Each session host runs the AVD agent, which Microsoft updates in flights. Scheduled Agent Updates is off by default; turning it on lets you pick up to two two-hour maintenance windows per week for agent updates.",
+      "whyItMatters": "Hosts must be on during the window to update. A host that stays powered off for 90 days loses its registration and comes back unavailable, so long-idle hosts need to be powered on for about 20 minutes at least every 90 days.",
+      "gotchas": [
+        "During a flight, agent versions can differ between hosts in the same pool for a few days; that alone isn't a fault.",
+        "The agent keeps a few previous versions so it can roll back from a failed update.",
+        "Validation pools receive agent updates first; keep one so a bad agent version shows up before production."
+      ],
+      "pins": [
+        "avd-assess:dimensions.yaml#updates.agent",
+        "avd-assess:dimensions.yaml#updates.validation-pool",
+        "avd-assess:pillars.yaml#images"
+      ],
+      "checkQuestion": {
+        "prompt": "A spare session host was left deallocated for four months. After you start it, it shows as Unavailable in the host pool. What is the most likely cause?",
+        "choices": [
+          "Its FSLogix share is full",
+          "It missed the 90-day check-in and lost its registration with the AVD service",
+          "Breadth-first load balancing skips it",
+          "Screen capture protection blocks it"
+        ],
+        "answerIndex": 1,
+        "explanation": "Hosts must be powered on regularly (at least every 90 days) to keep their registration current. After that it needs re-registering."
+      }
     }
   ]
 }
