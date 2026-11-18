@@ -27,6 +27,9 @@ test('dataset integrity: tracks, concepts, scenarios, labs, and pins', () => {
     assert.ok(trackIds.has(c.track), `Unknown track ${c.track} on concept ${c.id}`);
     assert.ok(c.exams.length > 0, `Missing exams on ${c.id}`);
     assert.ok(c.pins.length > 0, `Missing pins on ${c.id}`);
+    for (const pin of c.pins) {
+      assert.match(pin, /^(avd-assess|avd-second-brain):[^\s#]+(#[^\s]+)?$/, `Malformed pin ${pin} on ${c.id}`);
+    }
     const q = c.checkQuestion;
     assert.ok(q.choices.length >= 2, `Not enough choices on ${c.id}`);
     assert.ok(q.answerIndex >= 0 && q.answerIndex < q.choices.length, `Invalid answerIndex on ${c.id}`);
@@ -46,7 +49,7 @@ test('filterBySelector filters by exam and track', () => {
 
   assert.ok(az104.length >= 5);
   assert.ok(az140.length >= 15);
-  assert.equal(core.length, 7);
+  assert.equal(core.length, 10);
 });
 
 test('no tenant UUIDs or emails leaked in dataset', () => {
